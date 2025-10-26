@@ -38,20 +38,59 @@ export default function ChatInterface({ selectedAgent }: ChatInterfaceProps) {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const currentInput = inputValue;
     setInputValue('');
     setIsLoading(true);
 
-    // Simulate AI response (à remplacer par l'appel API réel)
-    setTimeout(() => {
+    try {
+      // Call backend agent API
+      const response = await fetch('http://localhost:8000/api/agent/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: currentInput,
+          graph_id: selectedAgent,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get response from agent');
+      }
+
+      const data = await response.json();
+
+      // Parse [[X]] pattern and remove it from display
+      let displayContent = data.response;
+      const scenarioMatch = displayContent.match(/\[\[(\d)\]\]/);
+      if (scenarioMatch) {
+        // Remove [[X]] from display text
+        displayContent = displayContent.replace(/\[\[(\d)\]\]/, '');
+        console.log('Scenario detected:', scenarioMatch[1]);
+        // TODO: Execute scenario here when implemented
+      }
+
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `This is a simulated response from the ${selectedAgent}. The actual integration with the LLM will be implemented next.`,
+        content: displayContent.trim(),
         timestamp: new Date(),
       };
+
       setMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('Error calling agent:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: "Désolé, une erreur s'est produite. Veuillez réessayer.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
