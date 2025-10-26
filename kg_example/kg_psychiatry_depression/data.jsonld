@@ -1,0 +1,116 @@
+{
+  "@context": {
+    "@vocab": "http://example.org/vocab/",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "schema": "http://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "exmed": "http://example.org/med/",
+    "exhear": "http://example.org/hearing/",
+    "expsych": "http://example.org/psych/",
+    "label": "rdfs:label",
+    "comment": "rdfs:comment",
+    "subClassOf": {
+      "@id": "rdfs:subClassOf",
+      "@type": "@id"
+    },
+    "domain": {
+      "@id": "rdfs:domain",
+      "@type": "@id"
+    },
+    "range": {
+      "@id": "rdfs:range",
+      "@type": "@id"
+    },
+    "type": {
+      "@id": "@type"
+    },
+    "Class": "owl:Class",
+    "ObjectProperty": "owl:ObjectProperty",
+    "DatatypeProperty": "owl:DatatypeProperty",
+    "equivalentClass": {
+      "@id": "owl:equivalentClass",
+      "@type": "@id"
+    },
+    "equivalentProperty": {
+      "@id": "owl:equivalentProperty",
+      "@type": "@id"
+    },
+    "sameAs": {
+      "@id": "owl:sameAs",
+      "@type": "@id"
+    },
+    "inverseOf": {
+      "@id": "owl:inverseOf",
+      "@type": "@id"
+    },
+    "TransitiveProperty": "owl:TransitiveProperty",
+    "SymmetricProperty": "owl:SymmetricProperty",
+    "propertyChainAxiom": {
+      "@id": "owl:propertyChainAxiom",
+      "@type": "@id"
+    },
+    "onProperty": {
+      "@id": "owl:onProperty",
+      "@type": "@id"
+    },
+    "someValuesFrom": {
+      "@id": "owl:someValuesFrom",
+      "@type": "@id"
+    },
+    "Restriction": "owl:Restriction"
+  },
+  "@graph": [
+    {
+      "@id": "expsych:MajorDepression",
+      "expsych:hasSymptom": "expsych:LowMood"
+    },
+    {
+      "@id": "expsych:MajorDepression",
+      "expsych:hasSymptom": "expsych:Anhedonia"
+    },
+    {
+      "@id": "expsych:MajorDepression",
+      "expsych:hasSymptom": "expsych:Insomnia"
+    },
+    {
+      "@id": "expsych:MajorDepression",
+      "expsych:hasSymptom": "expsych:Fatigue"
+    },
+    {
+      "@id": "expsych:MajorDepression",
+      "expsych:hasRiskFactor": "expsych:ChronicIllness"
+    },
+    {
+      "@id": "expsych:MajorDepression",
+      "expsych:managedBy": "expsych:CBT"
+    },
+    {
+      "@id": "expsych:MajorDepression",
+      "expsych:managedBy": "expsych:SSRIs"
+    },
+    {
+      "@id": "expsych:AnxietyDisorder",
+      "expsych:hasSymptom": "expsych:Insomnia"
+    },
+    {
+      "@id": "expsych:AnxietyDisorder",
+      "expsych:coOccursWith": "expsych:MajorDepression"
+    },
+    {
+      "@id": "expsych:MajorDepression",
+      "expsych:assessedBy": "expsych:PHQ9"
+    },
+    {
+      "@id": "expsych:AnxietyDisorder",
+      "expsych:assessedBy": "expsych:GAD7"
+    },
+    {
+      "@id": "expsych:MajorDepression",
+      "exmed:hasSymptom": "expsych:SleepDisturbance"
+    }
+  ]
+}

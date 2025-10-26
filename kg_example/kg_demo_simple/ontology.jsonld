@@ -1,0 +1,207 @@
+{
+  "@context": {
+    "@vocab": "http://example.org/vocab/",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "schema": "http://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "exmed": "http://example.org/med/",
+    "exhear": "http://example.org/hearing/",
+    "expsych": "http://example.org/psych/",
+    "label": "rdfs:label",
+    "comment": "rdfs:comment",
+    "subClassOf": {
+      "@id": "rdfs:subClassOf",
+      "@type": "@id"
+    },
+    "domain": {
+      "@id": "rdfs:domain",
+      "@type": "@id"
+    },
+    "range": {
+      "@id": "rdfs:range",
+      "@type": "@id"
+    },
+    "type": {
+      "@id": "@type"
+    },
+    "Class": "owl:Class",
+    "ObjectProperty": "owl:ObjectProperty",
+    "DatatypeProperty": "owl:DatatypeProperty",
+    "equivalentClass": {
+      "@id": "owl:equivalentClass",
+      "@type": "@id"
+    },
+    "equivalentProperty": {
+      "@id": "owl:equivalentProperty",
+      "@type": "@id"
+    },
+    "sameAs": {
+      "@id": "owl:sameAs",
+      "@type": "@id"
+    },
+    "inverseOf": {
+      "@id": "owl:inverseOf",
+      "@type": "@id"
+    },
+    "TransitiveProperty": "owl:TransitiveProperty",
+    "SymmetricProperty": "owl:SymmetricProperty",
+    "propertyChainAxiom": {
+      "@id": "owl:propertyChainAxiom",
+      "@type": "@id"
+    },
+    "onProperty": {
+      "@id": "owl:onProperty",
+      "@type": "@id"
+    },
+    "someValuesFrom": {
+      "@id": "owl:someValuesFrom",
+      "@type": "@id"
+    },
+    "Restriction": "owl:Restriction"
+  },
+  "@id": "http://example.org/med/ontology",
+  "@type": "owl:Ontology",
+  "dct:title": "Generic Medical Ontology (Demo)",
+  "@graph": [
+    {
+      "@id": "exmed:MedicalEntity",
+      "type": "Class",
+      "label": "Medical entity"
+    },
+    {
+      "@id": "exmed:Condition",
+      "type": "Class",
+      "subClassOf": "exmed:MedicalEntity",
+      "label": "Condition"
+    },
+    {
+      "@id": "exmed:Symptom",
+      "type": "Class",
+      "subClassOf": "exmed:MedicalEntity",
+      "label": "Symptom"
+    },
+    {
+      "@id": "exmed:RiskFactor",
+      "type": "Class",
+      "subClassOf": "exmed:MedicalEntity",
+      "label": "Risk factor"
+    },
+    {
+      "@id": "exmed:Intervention",
+      "type": "Class",
+      "subClassOf": "exmed:MedicalEntity",
+      "label": "Intervention"
+    },
+    {
+      "@id": "exmed:AnatomicalSystem",
+      "type": "Class",
+      "subClassOf": "exmed:MedicalEntity",
+      "label": "Anatomical system"
+    },
+    {
+      "@id": "exmed:DiagnosticTest",
+      "type": "Class",
+      "subClassOf": "exmed:MedicalEntity",
+      "label": "Diagnostic test"
+    },
+    {
+      "@id": "exmed:hasSymptom",
+      "type": "ObjectProperty",
+      "domain": "exmed:Condition",
+      "range": "exmed:Symptom",
+      "label": "has symptom"
+    },
+    {
+      "@id": "exmed:indicates",
+      "type": "ObjectProperty",
+      "domain": "exmed:Symptom",
+      "range": "exmed:Condition",
+      "label": "indicates"
+    },
+    {
+      "@id": "exmed:managedBy",
+      "type": "ObjectProperty",
+      "domain": "exmed:Condition",
+      "range": "exmed:Intervention",
+      "label": "managed by"
+    },
+    {
+      "@id": "exmed:hasRiskFactor",
+      "type": "ObjectProperty",
+      "domain": "exmed:Condition",
+      "range": "exmed:RiskFactor",
+      "label": "has risk factor"
+    },
+    {
+      "@id": "exmed:affectsSystem",
+      "type": "ObjectProperty",
+      "domain": "exmed:Condition",
+      "range": "exmed:AnatomicalSystem",
+      "label": "affects system"
+    },
+    {
+      "@id": "exmed:partOfSystem",
+      "type": "ObjectProperty",
+      "domain": "exmed:MedicalEntity",
+      "range": "exmed:AnatomicalSystem",
+      "label": "part of system"
+    },
+    {
+      "@id": "exmed:investigatedBy",
+      "type": "ObjectProperty",
+      "domain": "exmed:Condition",
+      "range": "exmed:DiagnosticTest",
+      "label": "investigated by"
+    },
+    {
+      "@id": "exmed:coOccursWith",
+      "type": "ObjectProperty",
+      "type2": "SymmetricProperty",
+      "domain": "exmed:Condition",
+      "range": "exmed:Condition",
+      "label": "co-occurs with"
+    },
+    {
+      "@id": "exmed:hasSymptom",
+      "inverseOf": "exmed:isSymptomOf"
+    },
+    {
+      "@id": "exmed:isSymptomOf",
+      "type": "ObjectProperty",
+      "domain": "exmed:Symptom",
+      "range": "exmed:Condition",
+      "label": "is symptom of",
+      "inverseOf": "exmed:hasSymptom"
+    },
+    {
+      "@id": "exmed:suggestsAssociationWith",
+      "type": "ObjectProperty",
+      "domain": "exmed:Symptom",
+      "range": "exmed:Condition",
+      "label": "suggests association with",
+      "propertyChainAxiom": {
+        "@list": [
+          "exmed:isSymptomOf",
+          "exmed:coOccursWith"
+        ]
+      }
+    },
+    {
+      "@id": "exmed:relatedCondition",
+      "type": "ObjectProperty",
+      "domain": "exmed:Condition",
+      "range": "exmed:Condition",
+      "label": "related condition",
+      "propertyChainAxiom": {
+        "@list": [
+          "exmed:hasSymptom",
+          "exmed:isSymptomOf"
+        ]
+      }
+    }
+  ]
+}
