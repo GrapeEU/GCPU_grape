@@ -47,10 +47,26 @@ class Settings(BaseSettings):
     # ========================================
     # GraphDB / SPARQL
     # ========================================
-    kg_sparql_endpoint_url: str = ""
-    ontologies_sparql_endpoint_url: str = ""
+    kg_sparql_endpoint_url: str = "http://localhost:7200/repositories/unified"
+    ontologies_sparql_endpoint_url: str = "http://localhost:7200/repositories/unified"
     graphdb_username: str = ""
     graphdb_password: str = ""
+
+    # Repository mappings for multi-KG scenarios
+    graphdb_repo_demo: str = "http://localhost:7200/repositories/demo"
+    graphdb_repo_hearing: str = "http://localhost:7200/repositories/hearing"
+    graphdb_repo_psychiatry: str = "http://localhost:7200/repositories/psychiatry"
+    graphdb_repo_unified: str = "http://localhost:7200/repositories/unified"
+
+    @property
+    def get_repo_endpoint(self) -> dict:
+        """Return all repository endpoints as a dictionary."""
+        return {
+            "demo": self.graphdb_repo_demo,
+            "hearing": self.graphdb_repo_hearing,
+            "psychiatry": self.graphdb_repo_psychiatry,
+            "unified": self.graphdb_repo_unified
+        }
 
     # ========================================
     # LLM Providers

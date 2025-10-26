@@ -1,25 +1,27 @@
 services:
-  web:
-    build:
-      context: ./apps/web
-      dockerfile: Dockerfile
-      target: deps  # Use deps stage for development
-    container_name: grape-web
+  # GraphDB - RDF Triplestore
+  graphdb:
+    image: ontotext/graphdb:10.7.3
+    container_name: grape-graphdb
     ports:
-      - "3000:3000"
+      - "7200:7200"
     volumes:
-      - ./apps/web:/app
-      - /app/node_modules
-      - /app/.next
+      - graphdb-data:/opt/graphdb/home
+      - graphdb-import:/root/graphdb-import
+      - ./kg_example:/kg_example:ro
     environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://api:8000
-    command: npm run dev
+      GDB_JAVA_OPTS: "-Xmx2g -Xms1g"
     networks:
       - grape-network
-    depends_on:
-      - api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7200/rest/repositories"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
+  # Backend API
   api:
     build:
       context: ./apps/backend
@@ -27,17 +29,21 @@ services:
     container_name: grape-api
     ports:
       - "8000:8000"
-    volumes:
-      - ./apps/backend:/app
-      - /app/.venv
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
+      - KG_SPARQL_ENDPOINT_URL=http://graphdb:7200/repositories/unified
+      - GRAPHDB_REPO_DEMO=http://graphdb:7200/repositories/demo
+      - GRAPHDB_REPO_HEARING=http://graphdb:7200/repositories/hearing
+      - GRAPHDB_REPO_PSYCHIATRY=http://graphdb:7200/repositories/psychiatry
+      - GRAPHDB_REPO_UNIFIED=http://graphdb:7200/repositories/unified
     env_file:
       - ./apps/backend/.env
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - grape-network
+    depends_on:
+      graphdb:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
@@ -45,10 +51,39 @@ services:
       retries: 3
       start_period: 40s
 
+  # Frontend Web App
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      target: deps
+    container_name: grape-web
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/web:/app
+      - web-node-modules:/app/node_modules
+      - web-next:/app/.next
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - HOSTNAME=0.0.0.0
+    command: npm run dev -- --hostname 0.0.0.0
+    networks:
+      - grape-network
+    depends_on:
+      - api
+
 networks:
   grape-network:
     driver: bridge
 
 volumes:
-  node_modules:
-  next_build:
+  graphdb-data:
+    driver: local
+  graphdb-import:
+    driver: local
+  web-node-modules:
+    driver: local
+  web-next:
+    driver: local
