@@ -9,15 +9,67 @@ interface Message {
   timestamp: Date;
 }
 
-interface ChatInterfaceProps {
-  selectedAgent: string | null;
+export interface ScenarioResultData {
+  title: string;
+  summary: string;
+  nodes: Array<{ id: string; label?: string; type?: string }>;
+  links: Array<{ source: string; target: string; label?: string }>;
+  trace: string[];
 }
 
-export default function ChatInterface({ selectedAgent }: ChatInterfaceProps) {
+interface ChatInterfaceProps {
+  selectedAgent: string | null;
+  onScenarioResult?: (data: ScenarioResultData | null) => void;
+}
+
+const agentKgMap: Record<string, string> = {
+  'general-medical': 'grape_demo',
+  'hearing-tinnitus': 'grape_hearing',
+  'psychiatry-depression': 'grape_psychiatry',
+  'integrative-health': 'grape_unified',
+};
+
+const scenarioProgressMap: Record<string, string[]> = {
+  scenario_1_neighbourhood: [
+    'Step 1 – Identifying semantic entry points in the question…',
+    'Step 2 – Generating a targeted SPARQL query…',
+    'Step 3 – Interpreting graph results and compiling the answer…',
+  ],
+  scenario_2_multihop: [
+    'Step 1 – Anchoring the source and target concepts across domains…',
+    'Step 2 – Exploring multi-hop relational paths in the unified graph…',
+    'Step 3 – Analysing discovered paths and assembling the explanation…',
+  ],
+  scenario_3_federation: [
+    'Step 1 – Scanning hearing and psychiatry graphs for alignable concepts…',
+    'Step 2 – Retrieving cross-graph correspondences via owl:sameAs links…',
+    'Step 3 – Consolidating aligned concepts into an interpretable summary…',
+  ],
+  scenario_4_validation: [
+    'Step 1 – Formalising the assertion to validate…',
+    'Step 2 – Checking available graph evidence for the claim…',
+    'Step 3 – Summarising the conclusion and supporting triples…',
+  ],
+};
+
+export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const makeMessage = (role: 'user' | 'assistant', content: string): Message => ({
+    id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    role,
+    content,
+    timestamp: new Date(),
+  });
+
+  const appendAssistantMessage = (content: string) => {
+    setMessages(prev => [...prev, makeMessage('assistant', content)]);
+  };
+
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -27,23 +79,101 @@ export default function ChatInterface({ selectedAgent }: ChatInterfaceProps) {
     scrollToBottom();
   }, [messages]);
 
+  const executeScenario = async (question: string, kgName: string) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/agent/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question,
+          kg_name: kgName,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed scenario execution');
+      }
+
+      const payload = await response.json();
+      const scenarioId: string = payload.scenario_used || '';
+      const progressSteps = scenarioProgressMap[scenarioId] || [
+        'Step 1 – Analysing the question context…',
+        'Step 2 – Preparing graph reasoning steps…',
+        'Step 3 – Consolidating the final answer…',
+      ];
+
+      appendAssistantMessage(`Scenario detected: ${payload.scenario_name}`);
+      for (const step of progressSteps) {
+        await wait(300);
+        appendAssistantMessage(step);
+      }
+
+      await wait(300);
+
+      const traceLines: string[] = Array.isArray(payload.trace_formatted)
+        ? payload.trace_formatted
+            .map((step: any) => (step?.message || '').toString().trim())
+            .filter(Boolean)
+        : [];
+
+      const nodes = Array.isArray(payload.nodes)
+        ? payload.nodes.map((node: any) => ({
+            id: node.id,
+            label: node.label || (typeof node.id === 'string' ? node.id.split(/[/#]/).pop() : node.id),
+            type: node.type,
+          }))
+        : [];
+
+      const links = Array.isArray(payload.links)
+        ? payload.links.map((link: any) => ({
+            source: link.source,
+            target: link.target,
+            label: link.relation || link.label || '',
+          }))
+        : [];
+
+      const summaryMessage = [
+        `Scenario ${payload.scenario_name} — detailed findings`,
+        '',
+        payload.answer,
+        '',
+        `Nodes identified: ${nodes.length}`,
+        `Relations examined: ${links.length}`,
+      ].join('\n');
+
+      appendAssistantMessage(summaryMessage);
+
+      if (traceLines.length) {
+        appendAssistantMessage(`Execution log:\n${traceLines.map(line => `- ${line}`).join('\n')}`);
+      }
+
+      onScenarioResult?.({
+        title: payload.scenario_name,
+        summary: payload.answer,
+        nodes,
+        links,
+        trace: traceLines,
+      });
+    } catch (error) {
+      console.error('Scenario error:', error);
+      appendAssistantMessage('Scenario execution is temporarily unavailable. Please try again in a moment.');
+      onScenarioResult?.(null);
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!inputValue.trim() || !selectedAgent) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: inputValue,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    const userMessage = makeMessage('user', inputValue);
+    setMessages(prev => [...prev, userMessage]);
     const currentInput = inputValue;
     setInputValue('');
     setIsLoading(true);
+    onScenarioResult?.(null);
 
     try {
-      // Call backend agent API
       const response = await fetch('http://localhost:8000/api/agent/chat', {
         method: 'POST',
         headers: {
@@ -60,34 +190,22 @@ export default function ChatInterface({ selectedAgent }: ChatInterfaceProps) {
       }
 
       const data = await response.json();
+      const displayContent = (data.response || '').trim();
 
-      // Parse [[X]] pattern and remove it from display
-      let displayContent = data.response;
-      const scenarioMatch = displayContent.match(/\[\[(\d)\]\]/);
-      if (scenarioMatch) {
-        // Remove [[X]] from display text
-        displayContent = displayContent.replace(/\[\[(\d)\]\]/, '');
-        console.log('Scenario detected:', scenarioMatch[1]);
-        // TODO: Execute scenario here when implemented
+      if (displayContent) {
+        appendAssistantMessage(displayContent);
       }
 
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: displayContent.trim(),
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
+      if (data.is_query) {
+        const kgForQuery = data.suggested_kg || (selectedAgent ? agentKgMap[selectedAgent] : 'grape_unified');
+        await executeScenario(currentInput, kgForQuery);
+      } else {
+        onScenarioResult?.(null);
+      }
     } catch (error) {
       console.error('Error calling agent:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: "Désolé, une erreur s'est produite. Veuillez réessayer.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      appendAssistantMessage('An unexpected error occurred while contacting the agent. Please try again.');
+      onScenarioResult?.(null);
     } finally {
       setIsLoading(false);
     }

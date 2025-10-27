@@ -1,0 +1,185 @@
+@prefix exhear: <http://example.org/hearing/> .
+@prefix exmed: <http://example.org/medical/> .
+@prefix excommon: <http://example.org/common/> .
+@prefix expsych: <http://example.org/psychiatry/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+### Classes ###
+
+exhear:Condition rdf:type owl:Class ;
+    rdfs:label "Hearing condition" .
+
+exhear:Symptom rdf:type owl:Class ;
+    rdfs:label "Hearing symptom" ;
+    rdfs:subClassOf exhear:Condition .
+
+exhear:RiskFactor rdf:type owl:Class ;
+    rdfs:label "Hearing risk factor" .
+
+exhear:Intervention rdf:type owl:Class ;
+    rdfs:label "Hearing intervention" .
+
+exhear:DiagnosticTest rdf:type owl:Class ;
+    rdfs:label "Audiology diagnostic test" .
+
+### Properties ###
+
+exhear:hasSymptom rdf:type owl:ObjectProperty ;
+    rdfs:label "has symptom" ;
+    rdfs:domain exhear:Condition ;
+    rdfs:range exhear:Symptom .
+
+exhear:isCausedBy rdf:type owl:ObjectProperty ;
+    rdfs:label "is caused by" ;
+    rdfs:domain exhear:Condition ;
+    rdfs:range exhear:RiskFactor .
+
+exhear:hasRiskFactor rdf:type owl:ObjectProperty ;
+    rdfs:label "has risk factor" ;
+    rdfs:domain exhear:Condition ;
+    rdfs:range exhear:RiskFactor .
+
+exhear:hasTreatment rdf:type owl:ObjectProperty ;
+    rdfs:label "has treatment" ;
+    rdfs:domain exhear:Condition ;
+    rdfs:range exhear:Intervention .
+
+exhear:worsenedBy rdf:type owl:ObjectProperty ;
+    rdfs:label "worsened by" ;
+    rdfs:domain exhear:Condition ;
+    rdfs:range exhear:Symptom .
+
+exhear:worsens rdf:type owl:ObjectProperty ;
+    rdfs:label "worsens" ;
+    rdfs:domain exhear:Symptom ;
+    rdfs:range exhear:Condition ;
+    owl:inverseOf exhear:worsenedBy .
+
+exhear:managedBy rdf:type owl:ObjectProperty ;
+    rdfs:label "managed by" ;
+    rdfs:domain exhear:Condition ;
+    rdfs:range exhear:Intervention ;
+    owl:inverseOf exhear:manages .
+
+exhear:manages rdf:type owl:ObjectProperty ;
+    rdfs:label "manages" ;
+    rdfs:domain exhear:Intervention ;
+    rdfs:range exhear:Condition .
+
+exhear:requiresTest rdf:type owl:ObjectProperty ;
+    rdfs:label "requires diagnostic test" ;
+    rdfs:domain exhear:Condition ;
+    rdfs:range exhear:DiagnosticTest .
+
+### Hearing Conditions ###
+
+exhear:Tinnitus rdf:type exhear:Condition ;
+    rdfs:label "Tinnitus" ;
+    exhear:hasSymptom exhear:RingingSound , exhear:BuzzingSound , exhear:HissingSound ;
+    exhear:hasRiskFactor exhear:NoiseExposure , exhear:AgeRelatedHearingLoss ;
+    exhear:hasTreatment exhear:SoundTherapy , exhear:TinnitusRetrainingTherapy , exhear:CognitiveBehavioralTherapy ;
+    exhear:requiresTest exhear:Audiogram ;
+    exhear:isCausedBy exhear:NoiseExposure ;
+    owl:sameAs expsych:TinnitusAwarenessProgram .
+
+exhear:Hyperacusis rdf:type exhear:Condition ;
+    rdfs:label "Hyperacusis" ;
+    exhear:hasSymptom exhear:SoundSensitivity , exhear:SleepDisturbance ;
+    exhear:hasTreatment exhear:SoundTherapy , exhear:GradualSoundExposure ;
+    exhear:requiresTest exhear:LoudnessDiscomfortTest ;
+    exhear:worsenedBy exhear:AnxietyAmplification .
+
+exhear:HearingLoss rdf:type exhear:Condition ;
+    rdfs:label "Hearing Loss" ;
+    exhear:hasSymptom exhear:SpeechDifficulty , exhear:BalanceIssues ;
+    exhear:hasRiskFactor exhear:NoiseExposure , exhear:MetabolicSyndrome ;
+    exhear:worsenedBy exhear:SleepDisturbance ;
+    exhear:managedBy exhear:SoundTherapy , exhear:HearingAidFitting ;
+    exhear:requiresTest exhear:Audiogram .
+
+### Symptoms ###
+
+exhear:RingingSound rdf:type exhear:Symptom ;
+    rdfs:label "Ringing sound perception" .
+
+exhear:BuzzingSound rdf:type exhear:Symptom ;
+    rdfs:label "Buzzing sound perception" .
+
+exhear:HissingSound rdf:type exhear:Symptom ;
+    rdfs:label "Hissing sound perception" .
+
+exhear:SoundSensitivity rdf:type exhear:Symptom ;
+    rdfs:label "Sound sensitivity" .
+
+exhear:SleepDisturbance rdf:type exhear:Symptom ;
+    rdfs:label "Sleep disturbance linked to auditory disorder" ;
+    owl:sameAs expsych:SleepDisturbance ;
+    exhear:worsens exhear:HearingLoss ;
+    exhear:worsens exhear:Hyperacusis .
+
+exhear:AnxietyAmplification rdf:type exhear:Symptom ;
+    rdfs:label "Anxiety amplification" ;
+    owl:sameAs expsych:AnxietyAmplification .
+
+exhear:SpeechDifficulty rdf:type exhear:Symptom ;
+    rdfs:label "Speech understanding difficulty" .
+
+exhear:BalanceIssues rdf:type exhear:Symptom ;
+    rdfs:label "Balance issues" .
+
+### Risk Factors ###
+
+exhear:NoiseExposure rdf:type exhear:RiskFactor ;
+    rdfs:label "Noise exposure" .
+
+exhear:AgeRelatedHearingLoss rdf:type exhear:RiskFactor ;
+    rdfs:label "Age-related hearing loss" .
+
+exhear:MetabolicSyndrome rdf:type exhear:RiskFactor ;
+    rdfs:label "Metabolic syndrome" ;
+    owl:sameAs expsych:MetabolicStress .
+
+### Interventions ###
+
+exhear:SoundTherapy rdf:type exhear:Intervention ;
+    rdfs:label "Sound therapy" ;
+    exhear:manages exhear:Tinnitus , exhear:Hyperacusis , exhear:HearingLoss ;
+    owl:sameAs expsych:RelaxingSoundProtocol .
+
+exhear:TinnitusRetrainingTherapy rdf:type exhear:Intervention ;
+    rdfs:label "Tinnitus retraining therapy" ;
+    exhear:manages exhear:Tinnitus .
+
+exhear:CognitiveBehavioralTherapy rdf:type exhear:Intervention ;
+    rdfs:label "Cognitive Behavioral Therapy" ;
+    exhear:manages exhear:Tinnitus ;
+    owl:sameAs expsych:CognitiveRestructuring .
+
+exhear:GradualSoundExposure rdf:type exhear:Intervention ;
+    rdfs:label "Gradual sound exposure" ;
+    exhear:manages exhear:Hyperacusis .
+
+exhear:HearingAidFitting rdf:type exhear:Intervention ;
+    rdfs:label "Hearing aid fitting" ;
+    exhear:manages exhear:HearingLoss .
+
+### Diagnostic Tests ###
+
+exhear:Audiogram rdf:type exhear:DiagnosticTest ;
+    rdfs:label "Audiogram" .
+
+exhear:LoudnessDiscomfortTest rdf:type exhear:DiagnosticTest ;
+    rdfs:label "Loudness discomfort level test" .
+
+### Cross-domain bridges ###
+
+exhear:TinnitusRiskProfile rdf:type exhear:RiskFactor ;
+    rdfs:label "Risk profile for tinnitus" ;
+    owl:sameAs expsych:AnxietyRiskProfile .
+
+exhear:StressLinkedSleepDisturbance rdf:type exhear:Symptom ;
+    rdfs:label "Stress-linked sleep disturbance" ;
+    owl:sameAs expsych:StressInducedInsomnia ;
+    exhear:worsens exhear:HearingLoss .

@@ -9,6 +9,8 @@ Based on tested gen2kgbot core components:
 - Entity extraction (LLM-based)
 """
 
+import logging
+from ast import literal_eval
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
@@ -22,13 +24,15 @@ if str(gen2kgbot_path) not in sys.path:
 
 # Import validated gen2kgbot components
 from app.utils.sparql_toolkit import run_sparql_query
-from app.utils.graph_nodes import select_similar_classes, interpret_results
-from app.utils.construct_util import get_connected_classes
+from app.utils.graph_nodes import select_similar_classes
+from app.utils.construct_util import get_connected_classes, prefixed_to_fulliri
 import app.utils.config_manager as config
 from core.config import settings
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage
 
 router = APIRouter(prefix="/mcp", tags=["MCP Tools"])
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -46,6 +50,14 @@ class ConceptFinderRequest(BaseModel):
     query_text: str = Field(..., description="Natural language query or concept name")
     kg_name: str = Field(..., description="KG short name (grape_demo, grape_hearing, grape_psychiatry, grape_unified)")
     limit: int = Field(5, description="Maximum number of similar concepts")
+    scenario_id: Optional[str] = Field(
+        "scenario_3",
+        description="gen2kgbot scenario id to use for embeddings lookup (defaults to scenario_3)"
+    )
+    entities: Optional[List[str]] = Field(
+        None,
+        description="Optional list of entities already extracted from the question"
+    )
 
 
 class NeighbourhoodRequest(BaseModel):
@@ -57,6 +69,7 @@ class InterpretResultsRequest(BaseModel):
     question: str = Field(..., description="Original user question")
     sparql_results: str = Field(..., description="SPARQL results in CSV format")
     kg_name: str = Field(..., description="KG short name")
+    scenario_id: Optional[str] = Field(None, description="(Reserved) scenario hint for compatibility")
 
 
 class ExtractEntitiesRequest(BaseModel):
@@ -83,26 +96,29 @@ def configure_gen2kgbot_for_kg(kg_name: str, endpoint: Optional[str] = None):
         config.config["kg_sparql_endpoint_url"] = endpoint
         config.config["ontologies_sparql_endpoint_url"] = endpoint
     else:
-        # Use default endpoints based on kg_name
-        if kg_name == "grape_demo":
-            config.config["kg_sparql_endpoint_url"] = "http://localhost:7200/repositories/demo"
-        elif kg_name == "grape_hearing":
-            config.config["kg_sparql_endpoint_url"] = "http://localhost:7200/repositories/hearing"
-        elif kg_name == "grape_psychiatry":
-            config.config["kg_sparql_endpoint_url"] = "http://localhost:7200/repositories/psychiatry"
-        elif kg_name == "grape_unified":
-            config.config["kg_sparql_endpoint_url"] = "http://localhost:7200/repositories/unified"
-        else:
-            raise ValueError(f"Unknown KG name: {kg_name}. Use grape_demo, grape_hearing, grape_psychiatry, or grape_unified")
+        # Use endpoints from settings (environment-aware)
+        repo_map = {
+            "grape_demo": settings.graphdb_repo_demo,
+            "grape_hearing": settings.graphdb_repo_hearing,
+            "grape_psychiatry": settings.graphdb_repo_psychiatry,
+            "grape_unified": settings.graphdb_repo_unified,
+        }
 
-        config.config["ontologies_sparql_endpoint_url"] = config.config["kg_sparql_endpoint_url"]
+        repo_endpoint = repo_map.get(kg_name)
+        if not repo_endpoint:
+            raise ValueError(
+                f"Unknown KG name: {kg_name}. Use grape_demo, grape_hearing, grape_psychiatry, or grape_unified"
+            )
+
+        config.config["kg_sparql_endpoint_url"] = repo_endpoint
+        config.config["ontologies_sparql_endpoint_url"] = repo_endpoint
 
 
 async def extract_entities_with_llm(question: str, kg_description: str = "") -> List[str]:
     """Extract medical entities from question using Gemini LLM."""
     try:
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             google_api_key=settings.google_api_key,
             temperature=0.0
         )
@@ -185,26 +201,71 @@ async def find_concepts(request: ConceptFinderRequest):
         # Configure gen2kgbot for the specified KG
         configure_gen2kgbot_for_kg(request.kg_name)
 
-        # Create state dict for gen2kgbot
+        # Determine which entities to use for similarity search
+        entity_candidates = request.entities or [request.query_text]
+        entities = [e.strip() for e in entity_candidates if e and e.strip()]
+        if not entities:
+            entities = [request.query_text]
+
+        # Build minimal state for gen2kgbot similarity search
+        scenario_id = request.scenario_id or "scenario_3"
         state = {
-            "initial_question": request.query_text,
-            "relevant_entities": [request.query_text]  # Use query as entity
+            "scenario_id": scenario_id,
+            "question_relevant_entities": entities
         }
 
         # Call gen2kgbot's similarity search
         updated_state = select_similar_classes(state)
 
         # Extract similar classes
-        similar_classes = updated_state.get("similar_classes_list", [])
+        similar_classes = updated_state.get("selected_classes", [])
 
         # Format response
         concepts = []
-        for cls_uri, cls_label, cls_description in similar_classes[:request.limit]:
+        seen_uris = set()
+        for raw_cls in similar_classes:
+            cls_tuple = raw_cls
+
+            if isinstance(raw_cls, str):
+                try:
+                    cls_tuple = literal_eval(raw_cls)
+                except (ValueError, SyntaxError):
+                    # Skip entries that cannot be parsed
+                    continue
+
+            if not isinstance(cls_tuple, (list, tuple)) or len(cls_tuple) == 0:
+                continue
+
+            cls_uri = cls_tuple[0]
+            cls_label = cls_tuple[1] if len(cls_tuple) > 1 else None
+            cls_description = cls_tuple[2] if len(cls_tuple) > 2 else None
+
+            if not cls_uri:
+                continue
+
+            full_uri = prefixed_to_fulliri(str(cls_uri))
+
+            if full_uri in seen_uris:
+                continue
+
+            seen_uris.add(full_uri)
+
+            if cls_label:
+                label_value = cls_label.strip()
+            else:
+                trimmed_uri = full_uri.split("#")[-1] if "#" in full_uri else full_uri
+                trimmed_uri = trimmed_uri.split("/")[-1] if "/" in trimmed_uri else trimmed_uri
+                trimmed_uri = trimmed_uri.split(":")[-1] if ":" in trimmed_uri else trimmed_uri
+                label_value = trimmed_uri.strip()
+
             concepts.append({
-                "uri": cls_uri,
-                "label": cls_label or cls_uri.split("/")[-1].split("#")[-1],
+                "uri": full_uri,
+                "label": label_value,
                 "description": cls_description
             })
+
+            if len(concepts) >= request.limit:
+                break
 
         return {
             "concepts": concepts,
@@ -213,6 +274,7 @@ async def find_concepts(request: ConceptFinderRequest):
             "kg": request.kg_name
         }
     except Exception as e:
+        logger.exception("Concept finder failed for kg=%s query=%s", request.kg_name, request.query_text)
         raise HTTPException(status_code=500, detail=f"Concept finding failed: {str(e)}")
 
 
@@ -254,29 +316,58 @@ async def interpret_sparql_results(request: InterpretResultsRequest):
     """
     Convert SPARQL CSV results into natural language explanation.
 
-    Uses: gen2kgbot/app/utils/graph_nodes.interpret_results()
+    Uses Gemini LLM to summarize SPARQL CSV output.
     """
     try:
-        # Configure gen2kgbot
+        # Keep gen2kgbot configuration in sync (sets KG metadata used elsewhere)
         configure_gen2kgbot_for_kg(request.kg_name)
 
-        # Create state for interpret_results
-        state = {
-            "initial_question": request.question,
-            "sparql_answer": request.sparql_results,
-            "scenario": "scenario_custom"  # Generic scenario
-        }
+        api_key = settings.gemini_api_key or settings.google_api_key
+        if not api_key:
+            raise HTTPException(status_code=500, detail="GEMINI_API_KEY or GOOGLE_API_KEY not configured")
 
-        # Call gen2kgbot's interpretation
-        updated_state = interpret_results(state)
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=api_key,
+            temperature=0.2,
+        )
 
-        interpretation = updated_state.get("final_answer", "No interpretation generated")
+        csv_content = request.sparql_results.strip()
+        lines = [line for line in csv_content.split("\n") if line.strip()] if csv_content else []
+        results_count = max(len(lines) - 1, 0)
+
+        if results_count == 0:
+            interpretation = (
+                "No rows were returned for this query. "
+                "Try refining the question or expanding the neighbourhood search."
+            )
+        else:
+            prompt = f"""You are a medical knowledge graph assistant helping a user interpret SPARQL results.
+
+Question:
+{request.question}
+
+Results (CSV):
+```csv
+{csv_content}
+```
+
+Please provide:
+1. A concise paragraph (<=4 sentences) answering the question.
+2. Mention the number of result rows ({results_count}) and highlight notable relationships.
+3. Optional bullet list of key facts if it helps clarity.
+Keep the tone factual and helpful."""
+
+            response = await llm.ainvoke([HumanMessage(content=prompt)])
+            interpretation = response.content.strip() if response and response.content else ""
+            if not interpretation:
+                interpretation = "Results were retrieved, but no interpretation could be generated."
 
         return {
             "interpretation": interpretation,
             "question": request.question,
             "kg": request.kg_name,
-            "results_count": len(request.sparql_results.strip().split("\n")) - 1
+            "results_count": results_count
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Interpretation failed: {str(e)}")

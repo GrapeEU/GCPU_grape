@@ -1,4 +1,16 @@
 services:
+  # Ollama - Embedding and local LLM server
+  ollama:
+    image: ollama/ollama:latest
+    container_name: grape-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - grape-network
+
   # GraphDB - RDF Triplestore
   graphdb:
     image: ontotext/graphdb:10.7.3
@@ -37,6 +49,7 @@ services:
       - GRAPHDB_REPO_HEARING=http://graphdb:7200/repositories/hearing
       - GRAPHDB_REPO_PSYCHIATRY=http://graphdb:7200/repositories/psychiatry
       - GRAPHDB_REPO_UNIFIED=http://graphdb:7200/repositories/unified
+      - OLLAMA_HOST=http://ollama:11434
     env_file:
       - ./apps/backend/.env
     networks:
@@ -44,6 +57,8 @@ services:
     depends_on:
       graphdb:
         condition: service_healthy
+      ollama:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
@@ -82,6 +97,8 @@ volumes:
   graphdb-data:
     driver: local
   graphdb-import:
+    driver: local
+  ollama-data:
     driver: local
   web-node-modules:
     driver: local

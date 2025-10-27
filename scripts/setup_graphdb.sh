@@ -103,17 +103,16 @@ create_repository "unified" "Unified Medical KG (All graphs + alignment)"
 echo ""
 echo "📥 Loading knowledge graphs..."
 
-# Function to load JSON-LD into a repository
-load_jsonld() {
+# Function to load Turtle into a repository
+load_turtle() {
   local REPO_NAME=$1
   local FILE_PATH=$2
   local GRAPH_URI=$3
 
   echo "  Loading $(basename ${FILE_PATH}) into ${REPO_NAME}..."
 
-  # Load with context parameter
   curl -X POST \
-    -H "Content-Type: application/ld+json" \
+    -H "Content-Type: text/turtle" \
     --data-binary "@${FILE_PATH}" \
     "${GRAPHDB_URL}/repositories/${REPO_NAME}/statements?context=%3C${GRAPH_URI}%3E"
 
@@ -125,28 +124,17 @@ load_jsonld() {
   fi
 }
 
-# Load demo KG
-load_jsonld "demo" "./kg_example/kg_demo_simple/ontology.jsonld" "http://example.org/med/ontology"
-load_jsonld "demo" "./kg_example/kg_demo_simple/data.jsonld" "http://example.org/med/data"
+# Load hearing KG (TTL)
+load_turtle "hearing" "./kg_example/final_demo/hearing_graph.ttl" "http://example.org/hearing/data"
 
-# Load hearing KG
-load_jsonld "hearing" "./kg_example/kg_hearing_tinnitus/ontology.jsonld" "http://example.org/hearing/ontology"
-load_jsonld "hearing" "./kg_example/kg_hearing_tinnitus/data.jsonld" "http://example.org/hearing/data"
+# Load psychiatry KG (TTL)
+load_turtle "psychiatry" "./kg_example/final_demo/psyche_graph.ttl" "http://example.org/psych/data"
 
-# Load psychiatry KG
-load_jsonld "psychiatry" "./kg_example/kg_psychiatry_depression/ontology.jsonld" "http://example.org/psych/ontology"
-load_jsonld "psychiatry" "./kg_example/kg_psychiatry_depression/data.jsonld" "http://example.org/psych/data"
-
-# Load all into unified repository with alignment
+# Load unified repository (both TTLs)
 echo ""
 echo "🔗 Creating unified repository with alignment..."
-load_jsonld "unified" "./kg_example/kg_demo_simple/ontology.jsonld" "http://example.org/med/ontology"
-load_jsonld "unified" "./kg_example/kg_demo_simple/data.jsonld" "http://example.org/med/data"
-load_jsonld "unified" "./kg_example/kg_hearing_tinnitus/ontology.jsonld" "http://example.org/hearing/ontology"
-load_jsonld "unified" "./kg_example/kg_hearing_tinnitus/data.jsonld" "http://example.org/hearing/data"
-load_jsonld "unified" "./kg_example/kg_psychiatry_depression/ontology.jsonld" "http://example.org/psych/ontology"
-load_jsonld "unified" "./kg_example/kg_psychiatry_depression/data.jsonld" "http://example.org/psych/data"
-load_jsonld "unified" "./kg_example/alignment.jsonld" "http://example.org/alignment"
+load_turtle "unified" "./kg_example/final_demo/hearing_graph.ttl" "http://example.org/hearing/data"
+load_turtle "unified" "./kg_example/final_demo/psyche_graph.ttl" "http://example.org/psych/data"
 
 echo ""
 echo "✅ GraphDB setup complete!"

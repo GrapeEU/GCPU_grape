@@ -8,10 +8,6 @@ import { useTheme } from '@/contexts/ThemeContext';
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
 
-interface GraphVisualizerProps {
-  kgFiles?: string[];
-}
-
 interface GraphNode {
   id: string;
   label?: string;
@@ -23,6 +19,19 @@ interface GraphLink {
   source: string;
   target: string;
   label: string;
+}
+
+export interface ScenarioGraphData {
+  title: string;
+  summary: string;
+  nodes: GraphNode[];
+  links: GraphLink[];
+  trace?: string[];
+}
+
+interface GraphVisualizerProps {
+  kgFiles?: string[];
+  scenarioData?: ScenarioGraphData | null;
 }
 
 interface GraphData {
@@ -69,7 +78,7 @@ const getNodeColor = (type: string | undefined): string => {
   return NODE_COLORS['Unknown'];
 };
 
-export default function GraphVisualizer({ kgFiles = [] }: GraphVisualizerProps) {
+export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: GraphVisualizerProps) {
   const { theme } = useTheme();
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [loading, setLoading] = useState(false);
@@ -104,6 +113,34 @@ export default function GraphVisualizer({ kgFiles = [] }: GraphVisualizerProps) 
   }, []);
 
   useEffect(() => {
+    if (scenarioData) {
+      const nodes = scenarioData.nodes.map(node => ({
+        ...node,
+        label: node.label || node.id.split(/[/#]/).pop() || node.id,
+        color: getNodeColor(node.type),
+      }));
+
+      const links = scenarioData.links.map(link => ({
+        source: link.source,
+        target: link.target,
+        label: link.label || '',
+      }));
+
+      setGraphData({ nodes, links });
+      setSelectedNode(null);
+      setHighlightNodes(new Set());
+      setHighlightLinks(new Set());
+      setLoading(false);
+      setError(null);
+
+      requestAnimationFrame(() => {
+        if (fgRef.current && typeof fgRef.current.zoomToFit === 'function') {
+          fgRef.current.zoomToFit(400, 40);
+        }
+      });
+      return;
+    }
+
     if (kgFiles.length === 0) {
       setGraphData({ nodes: [], links: [] });
       return;
@@ -196,7 +233,7 @@ export default function GraphVisualizer({ kgFiles = [] }: GraphVisualizerProps) 
     };
 
     loadKGData();
-  }, [kgFiles]);
+  }, [kgFiles, scenarioData]);
 
   const handleNodeClick = useCallback((node: any) => {
     setSelectedNode(node);

@@ -1,32 +1,34 @@
 """
-Agent Endpoint - Main chat agent that routes to 9 scenarios
+Agent Endpoint - Main chat agent that orchestrates scenario execution
 
-Simple Gemini-based agent that:
-1. Receives user messages
-2. Identifies which scenario to use (1-9)
-3. Executes the scenario with MCP tools
-4. Returns the result
+The agent:
+1. Receives user questions
+2. Detects which scenario to use (neighbourhood, multihop, federation, validation)
+3. Executes the scenario using MCP tools
+4. Returns results with execution trace for UX display
 
-Usage:
-    POST /api/agent/chat
-    {
-        "message": "What is the relationship between X and Y?",
-        "graph_id": "optional_graph_id"
-    }
+All execution steps are logged for debugging and frontend display.
 """
 
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from core.config import settings
+from core.agent_executor import AgentExecutor
+from core.agent_logger import AgentLogger, StepType
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
-# Initialize Gemini
+
+# Initialize executor
+executor = AgentExecutor()
+
+
+# Initialize Gemini for chat
 def get_gemini_llm():
-    """Get Gemini LLM instance."""
+    """Get Gemini LLM instance for chat."""
     api_key = settings.gemini_api_key or settings.google_api_key
     if not api_key:
         raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY not set in .env file")
@@ -38,41 +40,26 @@ def get_gemini_llm():
     )
 
 
-# Agent system prompt
-AGENT_SYSTEM_PROMPT = """You are Grape KG Agent, a friendly assistant expert in knowledge graph exploration.
+# ============================================================================
+# Request/Response Models
+# ============================================================================
 
-## Behavior Rules:
 
-1. **General conversation**: Answer normally to greetings, general questions, or clarifications.
+class QueryRequest(BaseModel):
+    question: str = Field(..., description="User's question")
+    kg_name: str = Field("grape_hearing", description="Knowledge graph to query (grape_demo, grape_hearing, grape_psychiatry, grape_unified)")
+    scenario_id: Optional[str] = Field(None, description="Force a specific scenario (optional, auto-detected if not provided)")
 
-2. **Technical KG questions**: When the user asks a technical question requiring knowledge graph analysis:
-   - Respond with: "Laissez-moi regarder dans le graph [[X]]"
-   - Replace X with the scenario number (1-9)
-   - Add a brief friendly message after if appropriate
 
-## Available Scenarios:
-
-1. **Concept Exploration** - Explore information around a specific concept
-2. **Multi-hop Reasoning** - Find logical paths between concepts
-3. **NL2SPARQL Adaptive** - Convert complex questions to SPARQL queries
-4. **Cross-KG Federation** - Link concepts across multiple knowledge graphs
-5. **Validation/Proof** - Prove or refute assertions
-6. **Explainable Reasoning** - Explain the reasoning path taken
-7. **Filtered Exploration** - Query with business constraints
-8. **Alignment Detection** - Detect agreements/divergences between KGs
-9. **Decision Synthesis** - Actionable synthesis with traceability
-
-## Examples:
-
-User: "Hello!"
-You: "Bonjour ! Comment puis-je vous aider avec votre knowledge graph aujourd'hui ?"
-
-User: "What is the relationship between protein X and disease Y?"
-You: "Laissez-moi regarder dans le graph [[2]]"
-
-User: "Can you explain that?"
-You: "Bien sûr, je vais vous expliquer le raisonnement. Laissez-moi regarder dans le graph [[6]]"
-"""
+class QueryResponse(BaseModel):
+    answer: str = Field(..., description="Natural language answer")
+    scenario_used: str = Field(..., description="Scenario that was executed")
+    scenario_name: str = Field(..., description="Human-readable scenario name")
+    nodes: List[Dict[str, Any]] = Field(default_factory=list, description="Graph nodes for visualization")
+    links: List[Dict[str, Any]] = Field(default_factory=list, description="Graph links for visualization")
+    sparql_queries: List[str] = Field(default_factory=list, description="SPARQL queries executed")
+    trace: List[Dict[str, Any]] = Field(default_factory=list, description="Execution trace (technical)")
+    trace_formatted: List[Dict[str, str]] = Field(default_factory=list, description="Execution trace (user-friendly)")
 
 
 class ChatRequest(BaseModel):
@@ -82,70 +69,186 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str = Field(..., description="Agent's response")
-    scenario_used: Optional[int] = Field(None, description="Scenario number used (1-9)")
-    reasoning: Optional[str] = Field(None, description="Why this scenario was chosen")
+    is_query: bool = Field(False, description="Whether this requires query execution")
+    suggested_kg: Optional[str] = Field(None, description="Suggested KG based on question context")
+
+
+# ============================================================================
+# Endpoints
+# ============================================================================
+
+
+@router.post("/query", response_model=QueryResponse)
+async def execute_query(request: QueryRequest):
+    """
+    Execute a knowledge graph query using the agent.
+
+    This is the main endpoint for executing queries. It:
+    1. Detects the appropriate scenario (or uses provided scenario_id)
+    2. Executes the scenario using MCP tools
+    3. Logs each step for debugging and UX display
+    4. Returns results with visualization data
+
+    Example:
+    ```json
+    {
+      "question": "What are the symptoms of Tinnitus?",
+      "kg_name": "grape_hearing"
+    }
+    ```
+    """
+    try:
+        logger = AgentLogger()
+
+        # Detect scenario if not provided
+        if request.scenario_id:
+            scenario_id = request.scenario_id
+            logger.log_step(
+                StepType.SCENARIO_DETECTION,
+                f"Using provided scenario: {scenario_id}"
+            )
+        else:
+            scenario_id = executor.detect_scenario(request.question, logger)
+
+        # Execute scenario
+        result = await executor.execute_scenario(
+            scenario_id=scenario_id,
+            question=request.question,
+            kg_name=request.kg_name,
+            logger=logger
+        )
+
+        return QueryResponse(
+            answer=result.get("summary", "No results found"),
+            scenario_used=result["scenario"],
+            scenario_name=result["scenario_name"],
+            nodes=result.get("nodes", []),
+            links=result.get("links", []),
+            sparql_queries=result.get("sparql_queries", []),
+            trace=result.get("trace", []),
+            trace_formatted=result.get("trace_formatted", [])
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Query execution failed: {str(e)}")
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    Main chat endpoint - receives user message and routes to appropriate scenario.
+    General chat endpoint for conversational interface.
 
-    The agent can:
-    1. Respond to general questions normally
-    2. For technical KG questions, respond with "Laissez-moi regarder dans le graph [[X]]"
-       where X is the scenario number (parsed by frontend)
+    This endpoint handles both:
+    1. General conversation (greetings, clarifications)
+    2. Technical queries (which are routed to /agent/query)
+
+    The agent detects whether the message requires KG query execution
+    and responds accordingly.
     """
     try:
         llm = get_gemini_llm()
 
-        # Get response from Gemini
-        messages = [
-            SystemMessage(content=AGENT_SYSTEM_PROMPT),
-            HumanMessage(content=request.message)
-        ]
+        # Detect if this is a technical query or general conversation
+        detection_prompt = f"""You are a medical knowledge graph assistant. Analyze this message:
 
-        response = llm.invoke(messages)
-        agent_response = response.content.strip()
+"{request.message}"
 
-        # Extract scenario number from [[X]] pattern if present
-        import re
-        scenario_match = re.search(r'\[\[(\d)\]\]', agent_response)
+Is this a technical question that requires querying a knowledge graph?
+If yes, which medical domain? (general, hearing, psychiatry, or multiple)
 
-        if scenario_match:
-            scenario_num = int(scenario_match.group(1))
-            # Scenario execution will be implemented next
-            # For now, just return the response with scenario ID
+Respond with ONLY:
+- "QUERY:general" for general medical questions
+- "QUERY:hearing" for hearing/tinnitus questions
+- "QUERY:psychiatry" for mental health questions
+- "QUERY:unified" for cross-domain questions
+- "CHAT" for greetings, clarifications, or general conversation
+
+Response:"""
+
+        response = llm.invoke([HumanMessage(content=detection_prompt)])
+        detection = response.content.strip().upper()
+
+        if detection.startswith("QUERY:"):
+            # This is a technical query - extract domain
+            domain = detection.split(":")[1].lower()
+            kg_map = {
+                "general": "grape_demo",
+                "hearing": "grape_hearing",
+                "psychiatry": "grape_psychiatry",
+                "unified": "grape_unified"
+            }
+            kg_name = kg_map.get(domain, "grape_hearing")
+
             return ChatResponse(
-                response=agent_response,
-                scenario_used=scenario_num,
-                reasoning=f"Technical query requiring scenario {scenario_num}"
+                response=f"Let me search the {domain} knowledge graph for you...",
+                is_query=True,
+                suggested_kg=kg_name
             )
+
         else:
-            # General conversation, no scenario needed
+            # General conversation
+            chat_prompt = f"""You are Grape, a friendly medical knowledge graph assistant.
+
+The user said: "{request.message}"
+
+Respond naturally and helpfully. You can:
+- Greet users warmly
+- Answer general questions about your capabilities
+- Ask clarifying questions
+- Explain the 4 scenarios you can execute:
+  1. Neighbourhood Exploration - Explore relationships around a concept
+  2. Multi-Hop Path Finding - Find connections between concepts
+  3. Cross-KG Alignment - Discover links between medical domains
+  4. Assertion Validation - Validate medical claims
+
+Keep your response concise and friendly.
+
+Response:"""
+
+            chat_response = llm.invoke([HumanMessage(content=chat_prompt)])
+
             return ChatResponse(
-                response=agent_response,
-                scenario_used=None,
-                reasoning="General conversation"
+                response=chat_response.content.strip(),
+                is_query=False,
+                suggested_kg=None
             )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
 
 
 @router.get("/scenarios")
 async def list_scenarios():
     """List all available scenarios."""
+    scenarios = executor.scenarios
+
     return {
+        "total": len(scenarios),
         "scenarios": [
-            {"id": 1, "name": "Concept Exploration", "description": "Explore information around a concept"},
-            {"id": 2, "name": "Multi-hop Reasoning", "description": "Find logical paths between concepts"},
-            {"id": 3, "name": "NL2SPARQL Adaptive", "description": "Complex question to SPARQL with context"},
-            {"id": 4, "name": "Cross-KG Federation", "description": "Link concepts across multiple KGs"},
-            {"id": 5, "name": "Validation/Proof", "description": "Prove or refute assertions"},
-            {"id": 6, "name": "Explainable Reasoning", "description": "Explain the reasoning path"},
-            {"id": 7, "name": "Filtered Exploration", "description": "Query with business constraints"},
-            {"id": 8, "name": "Alignment Detection", "description": "Detect agreements/divergences"},
-            {"id": 9, "name": "Decision Synthesis", "description": "Actionable synthesis with traceability"}
+            {
+                "id": scenario_id,
+                "name": data["name"],
+                "description": data["description"],
+                "example_questions": data.get("example_questions", []),
+                "mcp_tools_required": data.get("mcp_tools_required", [])
+            }
+            for scenario_id, data in scenarios.items()
+        ]
+    }
+
+
+@router.get("/status")
+async def agent_status():
+    """Get agent status and configuration."""
+    return {
+        "status": "operational",
+        "scenarios_loaded": len(executor.scenarios),
+        "mcp_endpoint": executor.base_url,
+        "llm_model": "gemini-2.5-flash",
+        "available_kgs": [
+            "grape_demo",
+            "grape_hearing",
+            "grape_psychiatry",
+            "grape_unified"
         ]
     }
