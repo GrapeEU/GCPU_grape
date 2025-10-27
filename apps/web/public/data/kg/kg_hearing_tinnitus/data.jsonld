@@ -1,0 +1,344 @@
+{
+  "@context": {
+    "@vocab": "http://example.org/vocab/",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "schema": "http://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "exmed": "http://example.org/med/",
+    "exhear": "http://example.org/hearing/",
+    "expsych": "http://example.org/psych/",
+    "label": "rdfs:label",
+    "comment": "rdfs:comment",
+    "subClassOf": {
+      "@id": "rdfs:subClassOf",
+      "@type": "@id"
+    },
+    "domain": {
+      "@id": "rdfs:domain",
+      "@type": "@id"
+    },
+    "range": {
+      "@id": "rdfs:range",
+      "@type": "@id"
+    },
+    "type": {
+      "@id": "@type"
+    },
+    "Class": "owl:Class",
+    "ObjectProperty": "owl:ObjectProperty",
+    "DatatypeProperty": "owl:DatatypeProperty",
+    "equivalentClass": {
+      "@id": "owl:equivalentClass",
+      "@type": "@id"
+    },
+    "equivalentProperty": {
+      "@id": "owl:equivalentProperty",
+      "@type": "@id"
+    },
+    "sameAs": {
+      "@id": "owl:sameAs",
+      "@type": "@id"
+    },
+    "inverseOf": {
+      "@id": "owl:inverseOf",
+      "@type": "@id"
+    },
+    "TransitiveProperty": "owl:TransitiveProperty",
+    "SymmetricProperty": "owl:SymmetricProperty",
+    "propertyChainAxiom": {
+      "@id": "owl:propertyChainAxiom",
+      "@type": "@id"
+    },
+    "onProperty": {
+      "@id": "owl:onProperty",
+      "@type": "@id"
+    },
+    "someValuesFrom": {
+      "@id": "owl:someValuesFrom",
+      "@type": "@id"
+    },
+    "Restriction": "owl:Restriction"
+  },
+  "@graph": [
+    {
+      "@id": "exhear:Tinnitus",
+      "exhear:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Tinnitus",
+      "exhear:hasSymptom": "exhear:DepressiveSymptoms"
+    },
+    {
+      "@id": "exhear:Tinnitus",
+      "exhear:hasSymptom": "exhear:AnxietySymptoms"
+    },
+    {
+      "@id": "exhear:Tinnitus",
+      "exhear:hasRiskFactor": "exhear:NoiseExposure"
+    },
+    {
+      "@id": "exhear:Tinnitus",
+      "exhear:hasRiskFactor": "exhear:Age"
+    },
+    {
+      "@id": "exhear:Tinnitus",
+      "exhear:investigatedBy": "exhear:TinnitusQuestionnaire"
+    },
+    {
+      "@id": "exhear:Tinnitus",
+      "exhear:managedBy": "exhear:SoundTherapy"
+    },
+    {
+      "@id": "exhear:Tinnitus",
+      "exhear:managedBy": "exhear:CognitiveBehavioralTherapy"
+    },
+    {
+      "@id": "exhear:HearingLoss",
+      "exhear:hasRiskFactor": "exhear:Age"
+    },
+    {
+      "@id": "exhear:HearingLoss",
+      "exhear:hasRiskFactor": "exhear:NoiseExposure"
+    },
+    {
+      "@id": "exhear:HearingLoss",
+      "exhear:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:HearingLoss",
+      "exhear:managedBy": "exhear:HearingAids"
+    },
+    {
+      "@id": "exhear:HearingLoss",
+      "exhear:investigatedBy": "exhear:Audiometry"
+    },
+    {
+      "@id": "exhear:Hyperacusis",
+      "exhear:hasSymptom": "exhear:AnxietySymptoms"
+    },
+    {
+      "@id": "exhear:Hyperacusis",
+      "exhear:coOccursWith": "exhear:Tinnitus"
+    },
+    {
+      "@id": "exhear:Insomnia",
+      "exmed:isSymptomOf": "exhear:Tinnitus"
+    },
+    {
+      "@id": "exhear:PoorSleepQuality",
+      "exmed:isSymptomOf": "exhear:Tinnitus"
+    },
+    {
+      "@id": "exhear:DepressiveSymptoms",
+      "exmed:isSymptomOf": "exhear:Tinnitus"
+    },
+    {
+      "@id": "exhear:AnxietySymptoms",
+      "exmed:isSymptomOf": "exhear:Tinnitus"
+    },
+    {
+      "@id": "exhear:Patient1",
+      "type": "schema:Person",
+      "label": "Patient 1"
+    },
+    {
+      "@id": "exhear:Patient2",
+      "type": "schema:Person",
+      "label": "Patient 2"
+    },
+    {
+      "@id": "exhear:Patient2",
+      "exmed:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Patient3",
+      "type": "schema:Person",
+      "label": "Patient 3"
+    },
+    {
+      "@id": "exhear:Patient3",
+      "exmed:hasSymptom": "exhear:DepressiveSymptoms"
+    },
+    {
+      "@id": "exhear:Patient4",
+      "type": "schema:Person",
+      "label": "Patient 4"
+    },
+    {
+      "@id": "exhear:Patient4",
+      "exmed:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Patient4",
+      "exmed:hasRiskFactor": "exhear:NoiseExposure"
+    },
+    {
+      "@id": "exhear:Patient5",
+      "type": "schema:Person",
+      "label": "Patient 5"
+    },
+    {
+      "@id": "exhear:Patient5",
+      "exmed:hasSymptom": "exhear:AnxietySymptoms"
+    },
+    {
+      "@id": "exhear:Patient6",
+      "type": "schema:Person",
+      "label": "Patient 6"
+    },
+    {
+      "@id": "exhear:Patient6",
+      "exmed:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Patient6",
+      "exmed:hasSymptom": "exhear:DepressiveSymptoms"
+    },
+    {
+      "@id": "exhear:Patient7",
+      "type": "schema:Person",
+      "label": "Patient 7"
+    },
+    {
+      "@id": "exhear:Patient8",
+      "type": "schema:Person",
+      "label": "Patient 8"
+    },
+    {
+      "@id": "exhear:Patient8",
+      "exmed:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Patient8",
+      "exmed:hasRiskFactor": "exhear:NoiseExposure"
+    },
+    {
+      "@id": "exhear:Patient9",
+      "type": "schema:Person",
+      "label": "Patient 9"
+    },
+    {
+      "@id": "exhear:Patient9",
+      "exmed:hasSymptom": "exhear:DepressiveSymptoms"
+    },
+    {
+      "@id": "exhear:Patient10",
+      "type": "schema:Person",
+      "label": "Patient 10"
+    },
+    {
+      "@id": "exhear:Patient10",
+      "exmed:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Patient10",
+      "exmed:hasSymptom": "exhear:AnxietySymptoms"
+    },
+    {
+      "@id": "exhear:Patient11",
+      "type": "schema:Person",
+      "label": "Patient 11"
+    },
+    {
+      "@id": "exhear:Patient12",
+      "type": "schema:Person",
+      "label": "Patient 12"
+    },
+    {
+      "@id": "exhear:Patient12",
+      "exmed:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Patient12",
+      "exmed:hasSymptom": "exhear:DepressiveSymptoms"
+    },
+    {
+      "@id": "exhear:Patient12",
+      "exmed:hasRiskFactor": "exhear:NoiseExposure"
+    },
+    {
+      "@id": "exhear:Patient13",
+      "type": "schema:Person",
+      "label": "Patient 13"
+    },
+    {
+      "@id": "exhear:Patient14",
+      "type": "schema:Person",
+      "label": "Patient 14"
+    },
+    {
+      "@id": "exhear:Patient14",
+      "exmed:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Patient15",
+      "type": "schema:Person",
+      "label": "Patient 15"
+    },
+    {
+      "@id": "exhear:Patient15",
+      "exmed:hasSymptom": "exhear:DepressiveSymptoms"
+    },
+    {
+      "@id": "exhear:Patient15",
+      "exmed:hasSymptom": "exhear:AnxietySymptoms"
+    },
+    {
+      "@id": "exhear:Patient16",
+      "type": "schema:Person",
+      "label": "Patient 16"
+    },
+    {
+      "@id": "exhear:Patient16",
+      "exmed:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Patient16",
+      "exmed:hasRiskFactor": "exhear:NoiseExposure"
+    },
+    {
+      "@id": "exhear:Patient17",
+      "type": "schema:Person",
+      "label": "Patient 17"
+    },
+    {
+      "@id": "exhear:Patient18",
+      "type": "schema:Person",
+      "label": "Patient 18"
+    },
+    {
+      "@id": "exhear:Patient18",
+      "exmed:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Patient18",
+      "exmed:hasSymptom": "exhear:DepressiveSymptoms"
+    },
+    {
+      "@id": "exhear:Patient19",
+      "type": "schema:Person",
+      "label": "Patient 19"
+    },
+    {
+      "@id": "exhear:Patient20",
+      "type": "schema:Person",
+      "label": "Patient 20"
+    },
+    {
+      "@id": "exhear:Patient20",
+      "exmed:hasSymptom": "exhear:Insomnia"
+    },
+    {
+      "@id": "exhear:Patient20",
+      "exmed:hasSymptom": "exhear:AnxietySymptoms"
+    },
+    {
+      "@id": "exhear:Patient20",
+      "exmed:hasRiskFactor": "exhear:NoiseExposure"
+    }
+  ]
+}

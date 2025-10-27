@@ -1,0 +1,234 @@
+{
+  "@context": {
+    "@vocab": "http://example.org/vocab/",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "schema": "http://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "exmed": "http://example.org/med/",
+    "exhear": "http://example.org/hearing/",
+    "expsych": "http://example.org/psych/",
+    "label": "rdfs:label",
+    "comment": "rdfs:comment",
+    "subClassOf": {
+      "@id": "rdfs:subClassOf",
+      "@type": "@id"
+    },
+    "domain": {
+      "@id": "rdfs:domain",
+      "@type": "@id"
+    },
+    "range": {
+      "@id": "rdfs:range",
+      "@type": "@id"
+    },
+    "type": {
+      "@id": "@type"
+    },
+    "Class": "owl:Class",
+    "ObjectProperty": "owl:ObjectProperty",
+    "DatatypeProperty": "owl:DatatypeProperty",
+    "equivalentClass": {
+      "@id": "owl:equivalentClass",
+      "@type": "@id"
+    },
+    "equivalentProperty": {
+      "@id": "owl:equivalentProperty",
+      "@type": "@id"
+    },
+    "sameAs": {
+      "@id": "owl:sameAs",
+      "@type": "@id"
+    },
+    "inverseOf": {
+      "@id": "owl:inverseOf",
+      "@type": "@id"
+    },
+    "TransitiveProperty": "owl:TransitiveProperty",
+    "SymmetricProperty": "owl:SymmetricProperty",
+    "propertyChainAxiom": {
+      "@id": "owl:propertyChainAxiom",
+      "@type": "@id"
+    },
+    "onProperty": {
+      "@id": "owl:onProperty",
+      "@type": "@id"
+    },
+    "someValuesFrom": {
+      "@id": "owl:someValuesFrom",
+      "@type": "@id"
+    },
+    "Restriction": "owl:Restriction"
+  },
+  "@id": "http://example.org/hearing/ontology",
+  "@type": "owl:Ontology",
+  "dct:title": "Hearing & Tinnitus Ontology (Demo)",
+  "@graph": [
+    {
+      "@id": "exhear:Entity",
+      "type": "Class",
+      "label": "Hearing entity"
+    },
+    {
+      "@id": "exhear:Condition",
+      "type": "Class",
+      "subClassOf": "exhear:Entity",
+      "label": "Hearing condition"
+    },
+    {
+      "@id": "exhear:Symptom",
+      "type": "Class",
+      "subClassOf": "exhear:Entity",
+      "label": "Hearing symptom"
+    },
+    {
+      "@id": "exhear:RiskFactor",
+      "type": "Class",
+      "subClassOf": "exhear:Entity",
+      "label": "Risk factor"
+    },
+    {
+      "@id": "exhear:Test",
+      "type": "Class",
+      "subClassOf": "exhear:Entity",
+      "label": "Audiology test"
+    },
+    {
+      "@id": "exhear:Intervention",
+      "type": "Class",
+      "subClassOf": "exhear:Entity",
+      "label": "Intervention"
+    },
+    {
+      "@id": "exhear:SleepIssue",
+      "type": "Class",
+      "subClassOf": "exhear:Symptom",
+      "label": "Sleep issue"
+    },
+    {
+      "@id": "exhear:hasSymptom",
+      "type": "ObjectProperty",
+      "domain": "exhear:Condition",
+      "range": "exhear:Symptom",
+      "label": "has symptom"
+    },
+    {
+      "@id": "exhear:hasRiskFactor",
+      "type": "ObjectProperty",
+      "domain": "exhear:Condition",
+      "range": "exhear:RiskFactor",
+      "label": "has risk factor"
+    },
+    {
+      "@id": "exhear:managedBy",
+      "type": "ObjectProperty",
+      "domain": "exhear:Condition",
+      "range": "exhear:Intervention",
+      "label": "managed by"
+    },
+    {
+      "@id": "exhear:investigatedBy",
+      "type": "ObjectProperty",
+      "domain": "exhear:Condition",
+      "range": "exhear:Test",
+      "label": "investigated by"
+    },
+    {
+      "@id": "exhear:coOccursWith",
+      "type": "ObjectProperty",
+      "label": "co-occurs with"
+    },
+    {
+      "@id": "exhear:Symptom",
+      "equivalentClass": "exmed:Symptom"
+    },
+    {
+      "@id": "exhear:Condition",
+      "equivalentClass": "exmed:Condition"
+    },
+    {
+      "@id": "exhear:Tinnitus",
+      "type": "exhear:Condition",
+      "label": "Tinnitus"
+    },
+    {
+      "@id": "exhear:HearingLoss",
+      "type": "exhear:Condition",
+      "label": "Hearing loss"
+    },
+    {
+      "@id": "exhear:Hyperacusis",
+      "type": "exhear:Condition",
+      "label": "Hyperacusis"
+    },
+    {
+      "@id": "exhear:NoiseExposure",
+      "type": "exhear:RiskFactor",
+      "label": "Noise exposure"
+    },
+    {
+      "@id": "exhear:Age",
+      "type": "exhear:RiskFactor",
+      "label": "Advanced age"
+    },
+    {
+      "@id": "exhear:OtotoxicMedication",
+      "type": "exhear:RiskFactor",
+      "label": "Ototoxic medication"
+    },
+    {
+      "@id": "exhear:Insomnia",
+      "type": "exhear:SleepIssue",
+      "label": "Insomnia"
+    },
+    {
+      "@id": "exhear:PoorSleepQuality",
+      "type": "exhear:SleepIssue",
+      "label": "Poor sleep quality"
+    },
+    {
+      "@id": "exhear:AnxietySymptoms",
+      "type": "exhear:Symptom",
+      "label": "Anxiety symptoms"
+    },
+    {
+      "@id": "exhear:DepressiveSymptoms",
+      "type": "exhear:Symptom",
+      "label": "Depressive symptoms"
+    },
+    {
+      "@id": "exhear:SoundTherapy",
+      "type": "exhear:Intervention",
+      "label": "Sound therapy"
+    },
+    {
+      "@id": "exhear:HearingAids",
+      "type": "exhear:Intervention",
+      "label": "Hearing aids"
+    },
+    {
+      "@id": "exhear:CognitiveBehavioralTherapy",
+      "type": "exhear:Intervention",
+      "label": "CBT"
+    },
+    {
+      "@id": "exhear:Audiometry",
+      "type": "exhear:Test",
+      "label": "Pure-tone audiometry"
+    },
+    {
+      "@id": "exhear:TinnitusQuestionnaire",
+      "type": "exhear:Test",
+      "label": "Tinnitus Handicap Inventory"
+    },
+    {
+      "@id": "exhear:SleepDisturbance",
+      "type": "exhear:SleepIssue",
+      "label": "Sleep disturbance",
+      "equivalentClass": "expsych:SleepDisturbance"
+    }
+  ]
+}

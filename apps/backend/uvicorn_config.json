@@ -1,0 +1,13 @@
+{
+  "reload": true,
+  "reload_includes": ["*.py"],
+  "reload_excludes": [
+    ".venv/*",
+    "venv/*",
+    "*.pyc",
+    "__pycache__/*",
+    "gen2kgbot/*",
+    ".pytest_cache/*",
+    ".git/*"
+  ]
+}

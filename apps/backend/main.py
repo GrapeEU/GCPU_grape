@@ -133,6 +133,14 @@ app.include_router(health.router, prefix="/api")
 from api import mcp
 app.include_router(mcp.router, prefix="/api")
 
+# Graph data
+from api import graph
+app.include_router(graph.router, prefix="/api")
+
+# Agent
+from api import agent
+app.include_router(agent.router, prefix="/api")
+
 
 @app.get("/")
 async def root():
@@ -161,5 +169,6 @@ if __name__ == "__main__":
             "__pycache__/*",
             "gen2kgbot/*",
         ],
+        reload_includes=["*.py"],
         log_level=settings.log_level.lower(),
     )

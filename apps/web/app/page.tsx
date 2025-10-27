@@ -99,8 +99,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* CTA Button */}
-        <div className="mt-8">
+        {/* CTA Buttons */}
+        <div className="mt-8 flex flex-col sm:flex-row gap-4">
           <Link
             href="/workspace"
             className="inline-flex items-center gap-2 px-8 py-4 bg-[#E57373] text-white text-lg font-semibold rounded-lg hover:bg-[#D55555] transition-colors"
@@ -119,6 +119,25 @@ export default function Home() {
                 d="M13 7l5 5m0 0l-5 5m5-5H6"
               />
             </svg>
+          </Link>
+          <Link
+            href="/chat"
+            className="inline-flex items-center gap-2 px-8 py-4 border-2 border-[#E57373] text-[#E57373] text-lg font-semibold rounded-lg hover:bg-[#E57373] hover:text-white transition-colors"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+              />
+            </svg>
+            Chat with Agent
           </Link>
         </div>
 

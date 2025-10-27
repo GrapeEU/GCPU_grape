@@ -1,0 +1,188 @@
+{
+  "@context": {
+    "@vocab": "http://example.org/vocab/",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "schema": "http://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "exmed": "http://example.org/med/",
+    "exhear": "http://example.org/hearing/",
+    "expsych": "http://example.org/psych/",
+    "label": "rdfs:label",
+    "comment": "rdfs:comment",
+    "subClassOf": {
+      "@id": "rdfs:subClassOf",
+      "@type": "@id"
+    },
+    "domain": {
+      "@id": "rdfs:domain",
+      "@type": "@id"
+    },
+    "range": {
+      "@id": "rdfs:range",
+      "@type": "@id"
+    },
+    "type": {
+      "@id": "@type"
+    },
+    "Class": "owl:Class",
+    "ObjectProperty": "owl:ObjectProperty",
+    "DatatypeProperty": "owl:DatatypeProperty",
+    "equivalentClass": {
+      "@id": "owl:equivalentClass",
+      "@type": "@id"
+    },
+    "equivalentProperty": {
+      "@id": "owl:equivalentProperty",
+      "@type": "@id"
+    },
+    "sameAs": {
+      "@id": "owl:sameAs",
+      "@type": "@id"
+    },
+    "inverseOf": {
+      "@id": "owl:inverseOf",
+      "@type": "@id"
+    },
+    "TransitiveProperty": "owl:TransitiveProperty",
+    "SymmetricProperty": "owl:SymmetricProperty",
+    "propertyChainAxiom": {
+      "@id": "owl:propertyChainAxiom",
+      "@type": "@id"
+    },
+    "onProperty": {
+      "@id": "owl:onProperty",
+      "@type": "@id"
+    },
+    "someValuesFrom": {
+      "@id": "owl:someValuesFrom",
+      "@type": "@id"
+    },
+    "Restriction": "owl:Restriction"
+  },
+  "@graph": [
+    {
+      "@id": "exmed:RespiratorySystem",
+      "type": "exmed:AnatomicalSystem",
+      "label": "Respiratory system"
+    },
+    {
+      "@id": "exmed:NervousSystem",
+      "type": "exmed:AnatomicalSystem",
+      "label": "Nervous system"
+    },
+    {
+      "@id": "exmed:CardioSystem",
+      "type": "exmed:AnatomicalSystem",
+      "label": "Cardiovascular system"
+    },
+    {
+      "@id": "exmed:Asthma",
+      "type": "exmed:Condition",
+      "label": "Asthma",
+      "affectsSystem": "exmed:RespiratorySystem"
+    },
+    {
+      "@id": "exmed:AnxietyDisorder",
+      "type": "exmed:Condition",
+      "label": "Anxiety disorder",
+      "affectsSystem": "exmed:NervousSystem"
+    },
+    {
+      "@id": "exmed:Hypertension",
+      "type": "exmed:Condition",
+      "label": "Hypertension",
+      "affectsSystem": "exmed:CardioSystem"
+    },
+    {
+      "@id": "exmed:Wheezing",
+      "type": "exmed:Symptom",
+      "label": "Wheezing",
+      "partOfSystem": "exmed:RespiratorySystem"
+    },
+    {
+      "@id": "exmed:ChestTightness",
+      "type": "exmed:Symptom",
+      "label": "Chest tightness",
+      "partOfSystem": "exmed:RespiratorySystem"
+    },
+    {
+      "@id": "exmed:Palpitations",
+      "type": "exmed:Symptom",
+      "label": "Palpitations",
+      "partOfSystem": "exmed:CardioSystem"
+    },
+    {
+      "@id": "exmed:Smoking",
+      "type": "exmed:RiskFactor",
+      "label": "Smoking"
+    },
+    {
+      "@id": "exmed:Obesity",
+      "type": "exmed:RiskFactor",
+      "label": "Obesity"
+    },
+    {
+      "@id": "exmed:InhaledCorticosteroids",
+      "type": "exmed:Intervention",
+      "label": "Inhaled corticosteroids"
+    },
+    {
+      "@id": "exmed:CBT",
+      "type": "exmed:Intervention",
+      "label": "Cognitive behavioral therapy"
+    },
+    {
+      "@id": "exmed:Spirometry",
+      "type": "exmed:DiagnosticTest",
+      "label": "Spirometry"
+    },
+    {
+      "@id": "exmed:Asthma",
+      "hasSymptom": "exmed:Wheezing"
+    },
+    {
+      "@id": "exmed:Asthma",
+      "hasSymptom": "exmed:ChestTightness"
+    },
+    {
+      "@id": "exmed:Asthma",
+      "investigatedBy": "exmed:Spirometry"
+    },
+    {
+      "@id": "exmed:Asthma",
+      "managedBy": "exmed:InhaledCorticosteroids"
+    },
+    {
+      "@id": "exmed:Asthma",
+      "hasRiskFactor": "exmed:Smoking"
+    },
+    {
+      "@id": "exmed:Hypertension",
+      "hasRiskFactor": "exmed:Obesity"
+    },
+    {
+      "@id": "exmed:Hypertension",
+      "hasSymptom": "exmed:Palpitations"
+    },
+    {
+      "@id": "exmed:AnxietyDisorder",
+      "hasSymptom": "exmed:Palpitations"
+    },
+    {
+      "@id": "exmed:AnxietyDisorder",
+      "coOccursWith": "exmed:Asthma"
+    },
+    {
+      "@id": "exmed:Palpitations",
+      "type": "exmed:Symptom"
+    },
+    {
+      "@id": "exmed:Palpitations",
+      "isSymptomOf": "exmed:Hypertension"
+    }
+  ]
+}

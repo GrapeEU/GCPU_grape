@@ -1,7 +1,5 @@
 from typing import List
-from rdflib import Graph
-from rdflib.exceptions import ParserError
-from rdflib.plugins.stores import sparqlstore
+from SPARQLWrapper import SPARQLWrapper, CSV
 import re
 from app.utils.logger_manager import setup_logger
 import app.utils.config_manager as config
@@ -27,22 +25,18 @@ def run_sparql_query(query: str, endpoint_url: str = None) -> str:
     if endpoint_url is None:
         endpoint_url = config.get_kg_sparql_endpoint_url()
     try:
-        # logger.debug(f"Submiting SPARQL query:\n{query}")
         logger.debug(f"Submiting to SPARQL endpoint: {endpoint_url}")
 
-        _store = sparqlstore.SPARQLStore()
-        _store.open(endpoint_url)
-        graph = Graph(store=_store)
+        sparql = SPARQLWrapper(endpoint_url)
+        sparql.setQuery(query)
+        sparql.setReturnFormat(CSV)
 
-        res = graph.query(query_object=query, initNs={}, initBindings={})
-
-    except ParserError as e:
-        raise ValueError("SPARQL query is invalid\n" f"{e}")
+        results = sparql.query().convert()
+        csv_str = results.decode("utf-8") if isinstance(results, bytes) else results
 
     except Exception as e:
         raise ValueError(f"An error occurred while executing the SPARQL query: {e}")
 
-    csv_str = res.serialize(format="csv").decode("utf-8")
     return csv_str
 
 

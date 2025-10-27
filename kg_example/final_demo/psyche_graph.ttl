@@ -1,0 +1,156 @@
+@prefix expsych: <http://example.org/psychiatry/> .
+@prefix exhear: <http://example.org/hearing/> .
+@prefix exmed: <http://example.org/medical/> .
+@prefix excommon: <http://example.org/common/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+### Classes ###
+
+expsych:Condition rdf:type owl:Class ;
+    rdfs:label "Psychiatric condition" .
+
+expsych:Symptom rdf:type owl:Class ;
+    rdfs:label "Psychiatric symptom" ;
+    rdfs:subClassOf expsych:Condition .
+
+expsych:RiskFactor rdf:type owl:Class ;
+    rdfs:label "Psychiatric risk factor" .
+
+expsych:Intervention rdf:type owl:Class ;
+    rdfs:label "Psychiatric intervention" .
+
+expsych:Assessment rdf:type owl:Class ;
+    rdfs:label "Psychological assessment" .
+
+### Properties ###
+
+expsych:increasesRiskOf rdf:type owl:ObjectProperty ;
+    rdfs:label "increases risk of" ;
+    rdfs:domain expsych:Condition ;
+    rdfs:range expsych:Condition .
+
+expsych:hasSymptom rdf:type owl:ObjectProperty ;
+    rdfs:label "has symptom" ;
+    rdfs:domain expsych:Condition ;
+    rdfs:range expsych:Symptom .
+
+expsych:manifestsAs rdf:type owl:ObjectProperty ;
+    rdfs:label "manifests as" ;
+    rdfs:domain expsych:Condition ;
+    rdfs:range expsych:Symptom .
+
+expsych:sharesRiskFactor rdf:type owl:ObjectProperty ;
+    rdfs:label "shares risk factor" ;
+    rdfs:domain expsych:Condition ;
+    rdfs:range expsych:Condition .
+
+expsych:linkedTo rdf:type owl:ObjectProperty ;
+    rdfs:label "linked to" ;
+    rdfs:domain expsych:Condition ;
+    rdfs:range owl:Thing .
+
+expsych:managedBy rdf:type owl:ObjectProperty ;
+    rdfs:label "managed by" ;
+    rdfs:domain expsych:Condition ;
+    rdfs:range expsych:Intervention .
+
+expsych:assessedBy rdf:type owl:ObjectProperty ;
+    rdfs:label "assessed by" ;
+    rdfs:domain expsych:Condition ;
+    rdfs:range expsych:Assessment .
+
+### Conditions ###
+
+expsych:ChronicStress rdf:type expsych:Condition ;
+    rdfs:label "Chronic Stress" ;
+    expsych:increasesRiskOf expsych:GeneralizedAnxietyDisorder ;
+    expsych:manifestsAs expsych:SleepDisturbance , expsych:AnxietyAmplification ;
+    expsych:linkedTo exhear:SleepDisturbance ;
+    owl:sameAs excommon:ChronicStress .
+
+expsych:GeneralizedAnxietyDisorder rdf:type expsych:Condition ;
+    rdfs:label "Generalized Anxiety Disorder" ;
+    expsych:hasSymptom expsych:Restlessness , expsych:SleepDisturbance ;
+    expsych:sharesRiskFactor expsych:TinnitusRumination ;
+    expsych:linkedTo exhear:Tinnitus ;
+    expsych:managedBy expsych:CognitiveRestructuring , expsych:RelaxingSoundProtocol ;
+    expsych:assessedBy expsych:AnxietySeverityIndex ;
+    owl:sameAs excommon:GAD .
+
+expsych:AuditoryAnxietyLoop rdf:type expsych:Condition ;
+    rdfs:label "Auditory anxiety loop" ;
+    expsych:hasSymptom expsych:AnxietyAmplification ;
+    expsych:linkedTo exhear:Tinnitus ;
+    owl:sameAs exhear:Tinnitus .
+
+### Symptoms ###
+
+expsych:SleepDisturbance rdf:type expsych:Symptom ;
+    rdfs:label "Sleep disturbance" ;
+    owl:sameAs exhear:SleepDisturbance ;
+    expsych:linkedTo exhear:HearingLoss .
+
+expsych:AnxietyAmplification rdf:type expsych:Symptom ;
+    rdfs:label "Anxiety amplification" ;
+    owl:sameAs exhear:AnxietyAmplification .
+
+expsych:Restlessness rdf:type expsych:Symptom ;
+    rdfs:label "Restlessness" .
+
+### Risk Factors ###
+
+expsych:TinnitusRumination rdf:type expsych:RiskFactor ;
+    rdfs:label "Tinnitus-related rumination" ;
+    owl:sameAs exhear:TinnitusRiskProfile .
+
+expsych:MetabolicStress rdf:type expsych:RiskFactor ;
+    rdfs:label "Metabolic stress" ;
+    owl:sameAs exhear:MetabolicSyndrome .
+
+expsych:NoiseSensitivityProfile rdf:type expsych:RiskFactor ;
+    rdfs:label "Noise sensitivity profile" ;
+    owl:sameAs exhear:NoiseExposure .
+
+### Interventions ###
+
+expsych:CognitiveRestructuring rdf:type expsych:Intervention ;
+    rdfs:label "Cognitive restructuring" ;
+    owl:sameAs exhear:CognitiveBehavioralTherapy .
+
+expsych:RelaxingSoundProtocol rdf:type expsych:Intervention ;
+    rdfs:label "Relaxing sound protocol" ;
+    owl:sameAs exhear:SoundTherapy .
+
+expsych:MindfulnessTraining rdf:type expsych:Intervention ;
+    rdfs:label "Mindfulness training" ;
+    expsych:managedBy expsych:ChronicStress ;
+    owl:sameAs excommon:MindfulnessTraining .
+
+### Assessments ###
+
+expsych:AnxietySeverityIndex rdf:type expsych:Assessment ;
+    rdfs:label "Anxiety severity index" .
+
+expsych:HyperacusisImpactQuestionnaire rdf:type expsych:Assessment ;
+    rdfs:label "Hyperacusis impact questionnaire" ;
+    owl:sameAs exhear:LoudnessDiscomfortTest .
+
+### Cross-domain bridges ###
+
+expsych:SleepDisturbance owl:sameAs exhear:SleepDisturbance .
+expsych:AnxietyAmplification owl:sameAs exhear:AnxietyAmplification .
+expsych:RelaxingSoundProtocol owl:sameAs exhear:SoundTherapy .
+expsych:CognitiveRestructuring owl:sameAs exhear:CognitiveBehavioralTherapy .
+expsych:TinnitusRumination owl:sameAs exhear:TinnitusRiskProfile .
+expsych:NoiseSensitivityProfile owl:sameAs exhear:NoiseExposure .
+
+expsych:GeneralizedAnxietyDisorder expsych:linkedTo exhear:Hyperacusis ;
+    expsych:sharesRiskFactor expsych:NoiseSensitivityProfile .
+
+# Explicit multi-hop bridge for scenario 2 (Chronic Stress -> Hearing Loss)
+
+expsych:ChronicStress expsych:increasesRiskOf expsych:GeneralizedAnxietyDisorder .
+expsych:GeneralizedAnxietyDisorder expsych:manifestsAs expsych:SleepDisturbance .
+expsych:SleepDisturbance expsych:linkedTo exhear:HearingLoss .
