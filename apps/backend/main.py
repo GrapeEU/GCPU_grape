@@ -133,6 +133,10 @@ app.include_router(health.router, prefix="/api")
 from api import mcp
 app.include_router(mcp.router, prefix="/api")
 
+# Graph data
+from api import graph
+app.include_router(graph.router, prefix="/api")
+
 # Agent
 from api import agent
 app.include_router(agent.router, prefix="/api")

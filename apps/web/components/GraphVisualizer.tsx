@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useTheme } from '@/contexts/ThemeContext';
+import { forceCollide, forceX, forceY } from 'd3-force';
 
 // Dynamically import ForceGraph to avoid SSR issues
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
@@ -13,12 +14,17 @@ interface GraphNode {
   label?: string;
   type?: string;
   color?: string;
+  sourceRepo?: string;
+  sourceRepos?: string[];
 }
 
 interface GraphLink {
   source: string;
   target: string;
   label: string;
+  relation?: string;
+  sourceRepo?: string;
+  sourceRepos?: string[];
 }
 
 export interface ScenarioGraphData {
@@ -27,6 +33,7 @@ export interface ScenarioGraphData {
   nodes: GraphNode[];
   links: GraphLink[];
   trace?: string[];
+  repo?: string | null;
 }
 
 interface GraphVisualizerProps {
@@ -66,16 +73,16 @@ const LEGEND_ITEMS = [
   { label: 'Person', color: '#78909C' },
 ];
 
-const getNodeColor = (type: string | undefined): string => {
-  if (!type) return NODE_COLORS['Unknown'];
-  if (NODE_COLORS[type]) return NODE_COLORS[type];
-  if (type.includes('Condition')) return NODE_COLORS['exmed:Condition'];
-  if (type.includes('Symptom')) return NODE_COLORS['exmed:Symptom'];
-  if (type.includes('Person')) return NODE_COLORS['schema:Person'];
-  if (type.includes('Intervention') || type.includes('Therapy')) return NODE_COLORS['exmed:Intervention'];
-  if (type.includes('Risk')) return NODE_COLORS['exmed:RiskFactor'];
-  if (type.includes('Test') || type.includes('Diagnostic')) return NODE_COLORS['exmed:DiagnosticTest'];
-  return NODE_COLORS['Unknown'];
+const REPO_LABELS: Record<string, string> = {
+  hearing: 'Hearing & Tinnitus KG',
+  psychiatry: 'Psychiatry KG',
+  unified: 'Unified KG',
+};
+
+const REPO_COLORS: Record<string, string> = {
+  hearing: '#2563EB',
+  psychiatry: '#9333EA',
+  unified: '#F97316',
 };
 
 export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: GraphVisualizerProps) {
@@ -87,15 +94,26 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
   const [highlightNodes, setHighlightNodes] = useState(new Set<string>());
   const [highlightLinks, setHighlightLinks] = useState(new Set<GraphLink>());
   const [graphMode, setGraphMode] = useState<GraphMode>('2d');
-  const [showLegend, setShowLegend] = useState(true);
+  const [showLegend, setShowLegend] = useState(false);
+  const [selectedRepos, setSelectedRepos] = useState<string[]>(kgFiles);
+  const [nodeDetails, setNodeDetails] = useState<any | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const fgRef = useRef<any>();
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const arraysEqual = useCallback((a: string[], b: string[]) => {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }, []);
+
   const isDark = theme === 'dark';
   const bgColor = isDark ? '#1C1C1C' : '#FDFDFD';
-  const textColor = isDark ? '#E5E7EB' : '#1C1C1C';
-  const borderColor = isDark ? '#374151' : '#E5E7EB';
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -113,130 +131,221 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
   }, []);
 
   useEffect(() => {
-    if (scenarioData) {
-      const nodes = scenarioData.nodes.map(node => ({
-        ...node,
-        label: node.label || node.id.split(/[/#]/).pop() || node.id,
-        color: getNodeColor(node.type),
-      }));
+    if (scenarioData?.repo) {
+      setSelectedRepos(prev => (prev.length === 1 && prev[0] === scenarioData.repo ? prev : [scenarioData.repo]));
+      return;
+    }
+    if (!scenarioData) {
+      setSelectedRepos(prev => (arraysEqual(prev, kgFiles) ? prev : [...kgFiles]));
+    }
+  }, [kgFiles, scenarioData, arraysEqual]);
 
-      const links = scenarioData.links.map(link => ({
-        source: link.source,
-        target: link.target,
-        label: link.label || '',
-      }));
-
-      setGraphData({ nodes, links });
-      setSelectedNode(null);
-      setHighlightNodes(new Set());
-      setHighlightLinks(new Set());
-      setLoading(false);
-      setError(null);
-
-      requestAnimationFrame(() => {
-        if (fgRef.current && typeof fgRef.current.zoomToFit === 'function') {
-          fgRef.current.zoomToFit(400, 40);
-        }
-      });
+  useEffect(() => {
+    if (!scenarioData) {
       return;
     }
 
-    if (kgFiles.length === 0) {
+    const nodes = scenarioData.nodes.map(node => ({
+      ...node,
+      label: node.label || node.id.split(/[/#]/).pop() || node.id,
+      color: '#F97316',
+      sourceRepos: scenarioData.repo ? [scenarioData.repo] : node.sourceRepos || [],
+      sourceRepo: scenarioData.repo || node.sourceRepo,
+    }));
+
+    const links = scenarioData.links.map(link => ({
+      source: link.source,
+      target: link.target,
+      label: link.label || link.relation || '',
+      relation: link.relation,
+      sourceRepos: scenarioData.repo ? [scenarioData.repo] : link.sourceRepos || [],
+      sourceRepo: scenarioData.repo || link.sourceRepo,
+    }));
+
+    setGraphData({ nodes, links });
+    setSelectedNode(null);
+    setHighlightNodes(new Set());
+    setHighlightLinks(new Set());
+    setLoading(false);
+    setError(null);
+
+    requestAnimationFrame(() => {
+      if (fgRef.current && typeof fgRef.current.zoomToFit === 'function') {
+        fgRef.current.zoomToFit(400, 40);
+      }
+    });
+  }, [scenarioData]);
+
+  useEffect(() => {
+    if (scenarioData) {
+      return;
+    }
+
+    if (!selectedRepos.length) {
       setGraphData({ nodes: [], links: [] });
       return;
     }
 
-    const loadKGData = async () => {
+    const loadRepoGraphs = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        const allNodes = new Map<string, GraphNode>();
-        const allLinks: GraphLink[] = [];
-
-        for (const kgFile of kgFiles) {
-          const response = await fetch(kgFile);
-          if (!response.ok) throw new Error(`Failed to load ${kgFile}`);
-
-          const jsonLd = await response.json();
-          const graph = jsonLd['@graph'] || [];
-
-          graph.forEach((item: any) => {
-            const nodeId = item['@id'];
-            if (!nodeId) return;
-
-            // Skip OWL ontology class definitions (they're just schema)
-            const nodeType = item.type || item['@type'] || 'Unknown';
-            if (nodeType === 'Class' || nodeType === 'owl:Class' ||
-                nodeType === 'ObjectProperty' || nodeType === 'owl:ObjectProperty') {
-              return;
+        const responses = await Promise.all(
+          selectedRepos.map(async repo => {
+            const response = await fetch(`http://localhost:8000/api/graph/${repo}/data`);
+            if (!response.ok) {
+              throw new Error(`Failed to load repository ${repo}`);
             }
-
-            if (!allNodes.has(nodeId)) {
-              allNodes.set(nodeId, {
-                id: nodeId,
-                label: item.label || item['rdfs:label'] || nodeId.split(/[/#]/).pop() || nodeId,
-                type: nodeType,
-                color: getNodeColor(nodeType),
-              });
-            }
-
-            // Extract relationships (links)
-            Object.entries(item).forEach(([key, value]) => {
-              if (key.startsWith('@') || key === 'label' || key === 'type' ||
-                  key === 'rdfs:label' || key === 'comment') return;
-
-              const targets = Array.isArray(value) ? value : [value];
-              targets.forEach((target: any) => {
-                if (typeof target === 'string' && target.startsWith('ex')) {
-                  allLinks.push({
-                    source: nodeId,
-                    target: target,
-                    label: key.split(/[/#:]/).pop() || key,
-                  });
-
-                  if (!allNodes.has(target)) {
-                    allNodes.set(target, {
-                      id: target,
-                      label: target.split(/[/#]/).pop() || target,
-                      type: 'Unknown',
-                      color: NODE_COLORS['Unknown'],
-                    });
-                  }
-                }
-              });
-            });
-          });
-        }
-
-        // Filter out isolated nodes (nodes with no connections)
-        const connectedNodeIds = new Set<string>();
-        allLinks.forEach(link => {
-          connectedNodeIds.add(typeof link.source === 'string' ? link.source : (link.source as any).id);
-          connectedNodeIds.add(typeof link.target === 'string' ? link.target : (link.target as any).id);
-        });
-
-        const filteredNodes = Array.from(allNodes.values()).filter(node =>
-          connectedNodeIds.has(node.id)
+            const data = await response.json();
+            return { repo, data };
+          }),
         );
 
-        setGraphData({
-          nodes: filteredNodes,
-          links: allLinks,
+        const uniqueNodes = new Map<string, GraphNode>();
+        const combinedLinks: GraphLink[] = [];
+        const linkIndex = new Map<string, number>();
+
+        responses.forEach(({ repo, data }) => {
+          data.nodes.forEach((node: any) => {
+            const label = node.label || node.id.split(/[/#]/).pop() || node.id;
+            const existing = uniqueNodes.get(node.id);
+            const repoSet = new Set(existing?.sourceRepos || []);
+            const intrinsicRepos = Array.isArray(node.sourceRepos) && node.sourceRepos.length
+              ? node.sourceRepos
+              : node.sourceRepo
+              ? [node.sourceRepo]
+              : [];
+
+            intrinsicRepos.forEach((r: string) => repoSet.add(r));
+            if (repo !== 'unified' || repoSet.size === 0) {
+              repoSet.add(repo);
+            }
+
+            uniqueNodes.set(node.id, {
+              id: node.id,
+              label,
+              type: node.type || existing?.type,
+              color: existing?.color || '#1C1C1C',
+              sourceRepos: Array.from(repoSet),
+              sourceRepo: repoSet.size === 1 ? Array.from(repoSet)[0] : undefined,
+            });
+          });
+
+          data.links.forEach((link: any) => {
+            const label = link.label || link.relation || '';
+            const key = `${link.source}::${link.target}::${label}`;
+            const existingIndex = linkIndex.get(key);
+            const intrinsicRepos = Array.isArray(link.sourceRepos) && link.sourceRepos.length
+              ? link.sourceRepos
+              : link.sourceRepo
+              ? [link.sourceRepo]
+              : [];
+
+            if (existingIndex === undefined) {
+              const repoSet = new Set<string>();
+              intrinsicRepos.forEach((r: string) => repoSet.add(r));
+              if (repo !== 'unified' || repoSet.size === 0) {
+                repoSet.add(repo);
+              }
+
+              linkIndex.set(key, combinedLinks.length);
+              combinedLinks.push({
+                source: link.source,
+                target: link.target,
+                label,
+                relation: link.relation || label,
+                sourceRepos: Array.from(repoSet),
+                sourceRepo: repoSet.size === 1 ? Array.from(repoSet)[0] : undefined,
+              });
+            } else {
+              const existingLink = combinedLinks[existingIndex];
+              const repoSet = new Set(existingLink.sourceRepos || []);
+              intrinsicRepos.forEach((r: string) => repoSet.add(r));
+              if (repo !== 'unified' || repoSet.size === 0) {
+                repoSet.add(repo);
+              }
+              combinedLinks[existingIndex] = {
+                ...existingLink,
+                sourceRepos: Array.from(repoSet),
+                sourceRepo: repoSet.size === 1 ? Array.from(repoSet)[0] : undefined,
+              };
+            }
+          });
         });
+
+        setGraphData({ nodes: Array.from(uniqueNodes.values()), links: combinedLinks });
+        setSelectedNode(null);
+        setHighlightNodes(new Set());
+        setHighlightLinks(new Set());
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load knowledge graph');
+        setGraphData({ nodes: [], links: [] });
         console.error('Error loading KG:', err);
       } finally {
         setLoading(false);
       }
     };
 
-    loadKGData();
-  }, [kgFiles, scenarioData]);
+    loadRepoGraphs();
+  }, [scenarioData, selectedRepos]);
+
+  useEffect(() => {
+    if (!selectedNode) {
+      setNodeDetails(null);
+      setDetailsError(null);
+      return;
+    }
+
+    const repoForDetails =
+      scenarioData?.repo ||
+      (Array.isArray(selectedNode.sourceRepos) && selectedNode.sourceRepos.length
+        ? selectedNode.sourceRepos[0]
+        : selectedRepos[0] || null);
+
+    if (!repoForDetails) {
+      setDetailsError(null);
+      setNodeDetails(
+        scenarioData
+          ? { id: selectedNode.id, summary: scenarioData.summary }
+          : null,
+      );
+      return;
+    }
+
+    const fetchDetails = async () => {
+      setDetailsLoading(true);
+      setDetailsError(null);
+      try {
+        const response = await fetch(`http://localhost:8000/api/graph/${repoForDetails}/node?id=${encodeURIComponent(selectedNode.id)}`);
+        if (!response.ok) {
+          throw new Error('Unable to load node details');
+        }
+        const data = await response.json();
+        setNodeDetails({
+          ...data,
+          repo: repoForDetails,
+          scenarioSummary: scenarioData?.summary || null,
+        });
+      } catch (err) {
+        setDetailsError(err instanceof Error ? err.message : 'Failed to load node details');
+        setNodeDetails(
+          scenarioData
+            ? { id: selectedNode.id, summary: scenarioData.summary }
+            : null,
+        );
+      } finally {
+        setDetailsLoading(false);
+      }
+    };
+
+    fetchDetails();
+  }, [selectedNode, selectedRepos, scenarioData]);
 
   const handleNodeClick = useCallback((node: any) => {
     setSelectedNode(node);
+    setNodeDetails(null);
+    setDetailsError(null);
     const neighbors = new Set<string>();
     const connectedLinks = new Set<GraphLink>();
 
@@ -263,21 +372,131 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
     setSelectedNode(null);
     setHighlightNodes(new Set());
     setHighlightLinks(new Set());
+    setNodeDetails(null);
+    setDetailsError(null);
   }, []);
 
   const hasData = graphData.nodes.length > 0;
+  const baseNodeColor = scenarioData ? '#F97316' : '#1C1C1C';
+  const baseLinkColor = scenarioData ? '#F97316' : (isDark ? '#4B5563' : '#CBD5F0');
+
+  const activeRepos = useMemo(() => {
+    if (scenarioData?.repo) {
+      return [scenarioData.repo];
+    }
+    const repoSet = new Set<string>();
+    graphData.nodes.forEach(node => {
+      if (Array.isArray(node.sourceRepos)) {
+        node.sourceRepos.forEach(repo => {
+          if (repo) repoSet.add(repo);
+        });
+      } else if (node.sourceRepo) {
+        repoSet.add(node.sourceRepo);
+      }
+    });
+    return Array.from(repoSet);
+  }, [graphData, scenarioData]);
+
+  const repoPositionMap = useMemo(() => {
+    if (scenarioData) {
+      return {} as Record<string, { x: number; y: number }>;
+    }
+    const repos = activeRepos.length ? activeRepos : selectedRepos;
+    if (!repos || repos.length <= 1) {
+      return {} as Record<string, { x: number; y: number }>;
+    }
+
+    const spacing = 380;
+    const map: Record<string, { x: number; y: number }> = {};
+    repos.forEach((repo, index) => {
+      const angle = (index / repos.length) * Math.PI * 2;
+      map[repo] = {
+        x: Math.cos(angle) * spacing,
+        y: Math.sin(angle) * spacing,
+      };
+    });
+    return map;
+  }, [activeRepos, selectedRepos, scenarioData]);
+
+  const resolveNodeColor = useCallback(
+    (node: GraphNode) => {
+      if (node.color) return node.color;
+      if (scenarioData) return baseNodeColor;
+
+      const repos = Array.isArray(node.sourceRepos) && node.sourceRepos.length
+        ? node.sourceRepos
+        : node.sourceRepo
+        ? [node.sourceRepo]
+        : [];
+
+      if (repos.length === 0) {
+        return selectedRepos.length > 1 || activeRepos.length > 1 ? '#4B5563' : baseNodeColor;
+      }
+
+      if (repos.length > 1) {
+        return '#F59E0B';
+      }
+
+      const repoColor = REPO_COLORS[repos[0]];
+      return repoColor || baseNodeColor;
+    },
+    [activeRepos, baseNodeColor, scenarioData, selectedRepos],
+  );
+
+  const configureGraphForces = useCallback(
+    (force: any) => {
+      if (!force) return;
+      force('link').distance(220).strength(0.25);
+      force('charge').strength(-360);
+      force('center').strength(0.12);
+      force('collision', forceCollide(32));
+
+      if (!scenarioData && Object.keys(repoPositionMap).length > 1) {
+        const targetX = forceX((node: GraphNode) => {
+          const repos = Array.isArray(node.sourceRepos) && node.sourceRepos.length
+            ? node.sourceRepos
+            : node.sourceRepo
+            ? [node.sourceRepo]
+            : [];
+          const anchor = repos.find(r => repoPositionMap[r]);
+          if (anchor) return repoPositionMap[anchor].x;
+          if (repos.length > 1) return 0;
+          return 0;
+        }).strength(0.09);
+
+        const targetY = forceY((node: GraphNode) => {
+          const repos = Array.isArray(node.sourceRepos) && node.sourceRepos.length
+            ? node.sourceRepos
+            : node.sourceRepo
+            ? [node.sourceRepo]
+            : [];
+          const anchor = repos.find(r => repoPositionMap[r]);
+          if (anchor) return repoPositionMap[anchor].y;
+          if (repos.length > 1) return 0;
+          return 0;
+        }).strength(0.09);
+
+        force('separateX', targetX);
+        force('separateY', targetY);
+      } else {
+        force('separateX', null);
+        force('separateY', null);
+      }
+    },
+    [repoPositionMap, scenarioData],
+  );
 
   const commonProps = {
     graphData,
     nodeLabel: (node: any) => node.label,
-    nodeColor: (node: any) => node.color,
+    nodeColor: (node: GraphNode) => resolveNodeColor(node),
     nodeRelSize: 4,
     nodeVal: (node: any) => {
       if (selectedNode?.id === node.id) return 3;
       if (highlightNodes.has(node.id)) return 2;
       return 1;
     },
-    linkColor: (link: any) => highlightLinks.has(link) ? '#E57373' : (isDark ? '#374151' : '#E5E7EB'),
+    linkColor: (link: any) => highlightLinks.has(link) ? '#F97316' : baseLinkColor,
     linkWidth: (link: any) => highlightLinks.has(link) ? 6 : 3,
     linkDirectionalArrowLength: 6,
     linkDirectionalArrowRelPos: 1,
@@ -300,6 +519,11 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>
               Knowledge Graph Visualizer
             </h3>
+            {!scenarioData && kgFiles.length > 0 && (
+              <p className={`mt-2 text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>
+                Visualising data from: {kgFiles.map(repo => REPO_LABELS[repo] || repo).join(', ')}
+              </p>
+            )}
           </div>
 
           {hasData && (
@@ -371,10 +595,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
                 {...commonProps}
                 width={dimensions.width}
                 height={dimensions.height}
-                d3Force={(force: any) => {
-                  force('link').distance(500);
-                  force('charge').strength(-1000);
-                }}
+                d3Force={configureGraphForces}
                 linkCanvasObjectMode={() => 'after'}
                 linkCanvasObject={(link: any, ctx: any) => {
                   const start = link.source;
@@ -383,6 +604,9 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
 
                   const textPos = { x: start.x + (end.x - start.x) / 2, y: start.y + (end.y - start.y) / 2 };
                   const label = link.label;
+                  if (!label) {
+                    return;
+                  }
                   const fontSize = 10;
                   ctx.font = `${fontSize}px Sans-Serif`;
                   const textWidth = ctx.measureText(label).width;
@@ -403,10 +627,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
                 {...commonProps}
                 width={dimensions.width}
                 height={dimensions.height}
-                d3Force={(force: any) => {
-                  force('link').distance(500);
-                  force('charge').strength(-1000);
-                }}
+                d3Force={configureGraphForces}
               />
             )}
 
@@ -427,7 +648,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
 
             {/* Node Info Panel */}
             {selectedNode && (
-              <div className={`absolute top-4 right-4 w-80 rounded-lg shadow-lg p-4 max-h-[80vh] overflow-y-auto ${isDark ? 'bg-[#1F2937] border border-[#374151]' : 'bg-white border border-[#E5E7EB]'}`}>
+              <div className={`absolute top-4 right-4 w-96 rounded-lg shadow-lg p-4 max-h-[85vh] overflow-y-auto ${isDark ? 'bg-[#1F2937] border border-[#374151]' : 'bg-white border border-[#E5E7EB]'}`}>
                 <div className="flex items-start justify-between mb-3">
                   <h4 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>Node Details</h4>
                   <button onClick={handleBackgroundClick} className={isDark ? 'text-[#9CA3AF] hover:text-white' : 'text-[#6B7280] hover:text-[#1C1C1C]'}>
@@ -436,51 +657,98 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
                     </svg>
                   </button>
                 </div>
-                <div className="space-y-3">
-                  <div>
-                    <div className={`text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>Label</div>
-                    <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>{selectedNode.label}</div>
-                  </div>
-                  <div>
-                    <div className={`text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>Type</div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: selectedNode.color }} />
-                      <div className={`text-sm ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>{selectedNode.type}</div>
-                    </div>
-                  </div>
 
-                  {/* Relations */}
-                  <div>
-                    <div className={`text-xs font-semibold mb-2 ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>
-                      Relations ({Array.from(highlightLinks).length})
-                    </div>
-                    <div className={`space-y-1 max-h-48 overflow-y-auto ${isDark ? 'text-[#E5E7EB]' : 'text-[#1C1C1C]'}`}>
-                      {Array.from(highlightLinks).map((link, idx) => {
-                        const sourceId = typeof link.source === 'string' ? link.source : (link.source as any).id;
-                        const targetId = typeof link.target === 'string' ? link.target : (link.target as any).id;
-                        const isOutgoing = sourceId === selectedNode.id;
-                        const connectedNodeId = isOutgoing ? targetId : sourceId;
-                        const connectedNode = graphData.nodes.find(n => n.id === connectedNodeId);
-
-                        return (
-                          <div key={idx} className={`text-xs p-2 rounded ${isDark ? 'bg-[#111827]' : 'bg-[#F9FAFB]'}`}>
-                            <div className="flex items-center gap-1">
-                              <span className={`font-medium ${isDark ? 'text-[#E57373]' : 'text-[#E57373]'}`}>
-                                {isOutgoing ? '→' : '←'} {link.label}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1 mt-1">
-                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: connectedNode?.color || '#BDBDBD' }} />
-                              <span className={isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}>
-                                {connectedNode?.label || connectedNodeId.split(/[/#]/).pop()}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                <div className={`text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>
+                  <div className="mb-2">
+                    <span className="font-semibold">Label:</span> {selectedNode.label}
                   </div>
+                  <div className="mb-2 break-words">
+                    <span className="font-semibold">Identifier:</span> {selectedNode.id}
+                  </div>
+                  {selectedNode.sourceRepos && selectedNode.sourceRepos.length > 0 && (
+                    <div className="mb-2">
+                      <span className="font-semibold">Repositories:</span>{' '}
+                      {selectedNode.sourceRepos.map(repo => REPO_LABELS[repo] || repo).join(', ')}
+                    </div>
+                  )}
+                  {selectedNode.type && (
+                    <div className="mb-3">
+                      <span className="font-semibold">Type hint:</span> {selectedNode.type}
+                    </div>
+                  )}
                 </div>
+
+                {detailsLoading ? (
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#E57373]" />
+                    <span className={isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}>Loading node ontology…</span>
+                  </div>
+                ) : detailsError ? (
+                  <div className={`text-xs ${isDark ? 'text-[#FCA5A5]' : 'text-[#B91C1C]'}`}>{detailsError}</div>
+                ) : nodeDetails ? (
+                  <div className="text-xs space-y-3">
+                    {nodeDetails.repo && (
+                      <div>
+                        <div className="font-semibold mb-1">Details source</div>
+                        <p className={isDark ? 'text-[#E5E7EB]' : 'text-[#1C1C1C]'}>
+                          {REPO_LABELS[nodeDetails.repo] || nodeDetails.repo}
+                        </p>
+                      </div>
+                    )}
+
+                    {nodeDetails.scenarioSummary && (
+                      <div>
+                        <div className="font-semibold mb-1">Scenario insight</div>
+                        <p className={isDark ? 'text-[#E5E7EB]' : 'text-[#1C1C1C]'}>
+                          {nodeDetails.scenarioSummary}
+                        </p>
+                      </div>
+                    )}
+
+                    {nodeDetails.types && nodeDetails.types.length > 0 && (
+                      <div>
+                        <div className="font-semibold mb-1">Types</div>
+                        <ul className={`list-disc ml-4 ${isDark ? 'text-[#E5E7EB]' : 'text-[#1C1C1C]'}`}>
+                          {nodeDetails.types.map((type: string) => (
+                            <li key={type}>{type}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {nodeDetails.outgoing && nodeDetails.outgoing.length > 0 && (
+                      <div>
+                        <div className="font-semibold mb-1">Outgoing relations</div>
+                        <ul className={`space-y-1 ${isDark ? 'text-[#E5E7EB]' : 'text-[#1C1C1C]'}`}>
+                          {nodeDetails.outgoing.map((edge: any, idx: number) => (
+                            <li key={`out-${idx}`}>
+                              <span className="font-semibold">{edge.predicateLabel}</span> → {edge.targetLabel}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {nodeDetails.incoming && nodeDetails.incoming.length > 0 && (
+                      <div>
+                        <div className="font-semibold mb-1">Incoming relations</div>
+                        <ul className={`space-y-1 ${isDark ? 'text-[#E5E7EB]' : 'text-[#1C1C1C]'}`}>
+                          {nodeDetails.incoming.map((edge: any, idx: number) => (
+                            <li key={`in-${idx}`}>
+                              {edge.sourceLabel} — <span className="font-semibold">{edge.predicateLabel}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {!nodeDetails.types?.length && !nodeDetails.outgoing?.length && !nodeDetails.incoming?.length && (
+                      <div>No additional ontology facts available.</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className={`text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>No additional ontology facts available.</div>
+                )}
               </div>
             )}
           </>
@@ -511,7 +779,13 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
               </>
             )}
           </div>
-          <span>{hasData ? `${kgFiles.length} KG file(s) • ${graphMode.toUpperCase()} mode` : 'Awaiting agent selection'}</span>
+          <span>
+            {hasData
+              ? scenarioData
+                ? `${scenarioData.repo ? (REPO_LABELS[scenarioData.repo] || scenarioData.repo) : 'Scenario dataset'} • ${graphMode.toUpperCase()} mode`
+                : `${selectedRepos.length} repo(s) visible • ${graphMode.toUpperCase()} mode`
+              : 'Awaiting agent selection'}
+          </span>
         </div>
       </div>
     </div>

@@ -15,6 +15,7 @@ export interface ScenarioResultData {
   nodes: Array<{ id: string; label?: string; type?: string }>;
   links: Array<{ source: string; target: string; label?: string }>;
   trace: string[];
+  repo: string | null;
 }
 
 interface ChatInterfaceProps {
@@ -23,10 +24,14 @@ interface ChatInterfaceProps {
 }
 
 const agentKgMap: Record<string, string> = {
-  'general-medical': 'grape_demo',
   'hearing-tinnitus': 'grape_hearing',
   'psychiatry-depression': 'grape_psychiatry',
   'integrative-health': 'grape_unified',
+};
+
+const repoFromKg = (kgName: string | null | undefined) => {
+  if (!kgName) return null;
+  return kgName.startsWith('grape_') ? kgName.replace('grape_', '') : kgName;
 };
 
 const scenarioProgressMap: Record<string, string[]> = {
@@ -97,6 +102,7 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
       }
 
       const payload = await response.json();
+      const repoName = repoFromKg(kgName);
       const scenarioId: string = payload.scenario_used || '';
       const progressSteps = scenarioProgressMap[scenarioId] || [
         'Step 1 – Analysing the question context…',
@@ -104,7 +110,7 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
         'Step 3 – Consolidating the final answer…',
       ];
 
-      appendAssistantMessage(`Scenario detected: ${payload.scenario_name}`);
+      appendAssistantMessage(`Scenario detected (${payload.scenario_name}). Initialising analysis pipeline…`);
       for (const step of progressSteps) {
         await wait(300);
         appendAssistantMessage(step);
@@ -139,9 +145,9 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
         '',
         payload.answer,
         '',
-        `Nodes identified: ${nodes.length}`,
-        `Relations examined: ${links.length}`,
-      ].join('\n');
+        repoName ? `Repository examined: ${repoName}` : '',
+        `Results found: ${nodes.length} nodes analysed and ${links.length} relations evaluated.`,
+      ].filter(Boolean).join('\n');
 
       appendAssistantMessage(summaryMessage);
 
@@ -155,6 +161,7 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
         nodes,
         links,
         trace: traceLines,
+        repo: repoName,
       });
     } catch (error) {
       console.error('Scenario error:', error);

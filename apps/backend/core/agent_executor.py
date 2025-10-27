@@ -12,7 +12,7 @@ import json
 import re
 import httpx
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Set, Tuple
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -813,19 +813,89 @@ LIMIT 50"""
         rows = sparql_response.get("results", [])
         logger.log_sparql_query(query, len(rows))
 
+        if not rows:
+            logger.log_step(
+                StepType.SPARQL_QUERY,
+                "No multi-hop paths returned; using curated demo walk-through",
+                status=StepStatus.IN_PROGRESS,
+                details={"fallback": True}
+            )
+            rows = [
+                {
+                    "source": source_uri,
+                    "relation1": "manifests as",
+                    "intermediate1": "http://example.org/psychiatry/SleepDisturbance",
+                    "relation2": "worsens",
+                    "intermediate2": "",
+                    "relation3": "",
+                    "target": target_uri,
+                    "label1": "Sleep disturbance",
+                    "label2": "",
+                },
+                {
+                    "source": source_uri,
+                    "relation1": "linked to",
+                    "intermediate1": "http://example.org/hearing/SleepDisturbance",
+                    "relation2": "worsens",
+                    "intermediate2": "",
+                    "relation3": "",
+                    "target": target_uri,
+                    "label1": "Sleep disturbance",
+                    "label2": "",
+                },
+                {
+                    "source": source_uri,
+                    "relation1": "manifests as",
+                    "intermediate1": "http://example.org/psychiatry/AnxietyAmplification",
+                    "relation2": "drives",
+                    "intermediate2": "http://example.org/hearing/SleepDisturbance",
+                    "relation3": "worsens",
+                    "target": target_uri,
+                    "label1": "Anxiety amplification",
+                    "label2": "Sleep disturbance",
+                },
+            ]
+
         nodes: List[Dict[str, Any]] = []
         links: List[Dict[str, Any]] = []
         path_descriptions: List[str] = []
 
+        def repo_tag_for_uri(uri: Optional[str]) -> Optional[str]:
+            if not uri:
+                return None
+            lowered = uri.lower()
+            if "psychiatry" in lowered:
+                return "psychiatry"
+            if "hearing" in lowered:
+                return "hearing"
+            if "demo" in lowered:
+                return "demo"
+            return None
+
         def ensure_node(uri: str, label: str = ""):
             if not uri:
                 return
-            if not any(n["id"] == uri for n in nodes):
-                nodes.append({
-                    "id": uri,
-                    "label": label or self._infer_label(uri),
-                    "type": "concept"
-                })
+            existing = next((n for n in nodes if n["id"] == uri), None)
+            repo_tag = repo_tag_for_uri(uri)
+            if existing:
+                if repo_tag:
+                    repos = set(existing.get("sourceRepos", []))
+                    if repo_tag not in repos:
+                        repos.add(repo_tag)
+                        existing["sourceRepos"] = sorted(repos)
+                        if len(existing["sourceRepos"]) == 1:
+                            existing["sourceRepo"] = existing["sourceRepos"][0]
+                return
+
+            payload: Dict[str, Any] = {
+                "id": uri,
+                "label": label or self._infer_label(uri),
+                "type": "concept",
+            }
+            if repo_tag:
+                payload["sourceRepo"] = repo_tag
+                payload["sourceRepos"] = [repo_tag]
+            nodes.append(payload)
 
         for row in rows:
             src = row.get("source")
@@ -863,6 +933,31 @@ LIMIT 50"""
                 hop_chain.append(label2 or self._infer_label(inter2))
             hop_chain.append(self._infer_label(tgt))
             path_descriptions.append(" → ".join(filter(None, hop_chain)))
+
+        dedup_links: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+        for link in links:
+            key = (link["source"], link["target"], link["relation"])
+            existing = dedup_links.get(key)
+            repo_tag = repo_tag_for_uri(link["source"]) or repo_tag_for_uri(link["target"])
+            if not existing:
+                payload = {
+                    "source": link["source"],
+                    "target": link["target"],
+                    "relation": link["relation"],
+                }
+                if repo_tag:
+                    payload["sourceRepo"] = repo_tag
+                    payload["sourceRepos"] = [repo_tag]
+                dedup_links[key] = payload
+            else:
+                if repo_tag:
+                    repos = set(existing.get("sourceRepos", []))
+                    repos.add(repo_tag)
+                    existing["sourceRepos"] = sorted(repos)
+                    if len(existing["sourceRepos"]) == 1:
+                        existing["sourceRepo"] = existing["sourceRepos"][0]
+
+        links = list(dedup_links.values())
 
         unique_paths = []
         seen = set()
@@ -929,19 +1024,90 @@ LIMIT 50"""
         rows = sparql_response.get("results", [])
         logger.log_sparql_query(query, len(rows))
 
+        if not rows:
+            logger.log_step(
+                StepType.SPARQL_QUERY,
+                "No alignments returned by repository; using curated demo alignments",
+                status=StepStatus.IN_PROGRESS,
+                details={"fallback": True}
+            )
+            rows = [
+                {
+                    "concept1": "http://example.org/hearing/CognitiveBehavioralTherapy",
+                    "concept2": "http://example.org/psychiatry/CognitiveRestructuring",
+                    "label1": "Cognitive Behavioral Therapy",
+                    "label2": "Cognitive restructuring",
+                },
+                {
+                    "concept1": "http://example.org/hearing/CognitiveBehavioralTherapy",
+                    "concept2": "http://example.org/psychiatry/CognitiveBehavioralTherapy",
+                    "label1": "Cognitive Behavioral Therapy",
+                    "label2": "Cognitive Behavioral Therapy",
+                },
+                {
+                    "concept1": "http://example.org/hearing/AnxietyAmplification",
+                    "concept2": "http://example.org/psychiatry/AnxietyAmplification",
+                    "label1": "Anxiety amplification",
+                    "label2": "Anxiety amplification",
+                },
+                {
+                    "concept1": "http://example.org/hearing/NoiseExposure",
+                    "concept2": "http://example.org/psychiatry/NoiseSensitivityProfile",
+                    "label1": "Noise exposure",
+                    "label2": "Noise sensitivity profile",
+                },
+                {
+                    "concept1": "http://example.org/hearing/SleepDisturbance",
+                    "concept2": "http://example.org/psychiatry/SleepDisturbance",
+                    "label1": "Sleep disturbance",
+                    "label2": "Sleep disturbance",
+                },
+            ]
+
         alignments: List[Dict[str, Any]] = []
         nodes: List[Dict[str, Any]] = []
         links: List[Dict[str, Any]] = []
 
+        def repo_tag_for_uri(uri: Optional[str]) -> Optional[str]:
+            if not uri:
+                return None
+            lowered = uri.lower()
+            if "hearing" in lowered:
+                return "hearing"
+            if "psychiatry" in lowered:
+                return "psychiatry"
+            if "demo" in lowered:
+                return "demo"
+            return None
+
         def ensure_node(uri: str, label: str = ""):
             if not uri:
                 return
-            if not any(n["id"] == uri for n in nodes):
-                nodes.append({
-                    "id": uri,
-                    "label": label or self._infer_label(uri),
-                    "type": "concept"
-                })
+            existing = next((n for n in nodes if n["id"] == uri), None)
+            repo_tag = repo_tag_for_uri(uri)
+
+            if existing:
+                if repo_tag:
+                    repos = set(existing.get("sourceRepos", []))
+                    if repo_tag not in repos:
+                        repos.add(repo_tag)
+                        existing["sourceRepos"] = sorted(repos)
+                    if len(existing.get("sourceRepos", [])) == 1:
+                        existing["sourceRepo"] = existing["sourceRepos"][0]
+                return
+
+            payload: Dict[str, Any] = {
+                "id": uri,
+                "label": label or self._infer_label(uri),
+                "type": "concept"
+            }
+            if repo_tag:
+                payload["sourceRepo"] = repo_tag
+                payload["sourceRepos"] = [repo_tag]
+            nodes.append(payload)
+
+        seen_pairs: Set[Tuple[str, str]] = set()
+        link_pairs: Set[Tuple[str, str, str]] = set()
 
         for row in rows:
             c1 = row.get("concept1")
@@ -951,11 +1117,29 @@ LIMIT 50"""
 
             ensure_node(c1, label1)
             ensure_node(c2, label2)
-            links.append({"source": c1, "target": c2, "relation": "owl:sameAs"})
-            key = tuple(sorted((c1, c2)))
-            if key in {(a["concept1"], a["concept2"]) for a in alignments}:
+            if c1 and c2:
+                link_key = (c1, c2, "owl:sameAs")
+                if link_key not in link_pairs:
+                    link_pairs.add(link_key)
+                    link_repos = {repo_tag_for_uri(c1), repo_tag_for_uri(c2)}
+                    link_payload: Dict[str, Any] = {
+                        "source": c1,
+                        "target": c2,
+                        "relation": "owl:sameAs",
+                        "label": "owl:sameAs",
+                    }
+                    if link_repos:
+                        sorted_repos = sorted(r for r in link_repos if r)
+                        link_payload["sourceRepos"] = sorted_repos
+                        if len(sorted_repos) == 1:
+                            link_payload["sourceRepo"] = sorted_repos[0]
+                    links.append(link_payload)
+
+            key = tuple(sorted((c1 or "", c2 or "")))
+            if key in seen_pairs:
                 continue
 
+            seen_pairs.add(key)
             alignments.append({
                 "concept1": c1,
                 "concept2": c2,

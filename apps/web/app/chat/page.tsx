@@ -12,7 +12,7 @@ import agents from '@/data/agents.json';
 
 export default function ChatPage() {
   const { theme } = useTheme();
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(agents[0]?.id ?? null);
   const [scenarioResult, setScenarioResult] = useState<ScenarioResultData | null>(null);
 
   const isDark = theme === 'dark';
@@ -71,25 +71,7 @@ export default function ChatPage() {
         </div>
 
         {/* Right Panel - Chat Interface */}
-        <div className="w-1/2 p-6 space-y-4 overflow-y-auto">
-          {scenarioResult && (
-            <div className={`rounded-lg border px-5 py-4 ${isDark ? 'bg-[#111827] border-[#374151]' : 'bg-white border-[#E5E7EB]'}`}>
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>
-                Scenario • {scenarioResult.title}
-              </h3>
-              <p className={`mt-2 text-sm ${isDark ? 'text-[#E5E7EB]' : 'text-[#1C1C1C]'}`}>
-                {scenarioResult.summary}
-              </p>
-              {scenarioResult.trace.length > 0 && (
-                <ul className={`mt-3 space-y-1 text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#4B5563]'}`}>
-                  {scenarioResult.trace.map((item, index) => (
-                    <li key={index}>• {item}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-
+        <div className="w-1/2 p-6 overflow-y-auto">
           <ChatInterface
             selectedAgent={selectedAgent}
             onScenarioResult={handleScenarioResult}
