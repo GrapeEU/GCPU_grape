@@ -1,99 +1,34 @@
 """
-MCP Tools Router - Exposes all 9 pipelines as HTTP endpoints
+MCP Tools Router - Exposes validated gen2kgbot functions as HTTP endpoints
 
-Simple wrapper around the pipelines for testing and HTTP access.
+Based on tested gen2kgbot core components:
+- SPARQL execution (sparql_toolkit)
+- Concept finding (embeddings + select_similar_classes)
+- Neighbourhood retrieval (construct_util)
+- Result interpretation (graph_nodes)
+- Entity extraction (LLM-based)
 """
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
+import sys
+from pathlib import Path
 
-# Import all 9 pipelines
-from pipelines.sparql_query_executor import SPARQLExecutor
-from pipelines.semantic_concept_finder import SemanticConceptFinder
-from pipelines.neighbourhood_retriever import NeighbourhoodRetriever
-from pipelines.multi_hop_path_explorer import MultiHopPathExplorer
-from pipelines.ontology_context_builder import OntologyContextBuilder
-from pipelines.example_based_prompt_retriever import ExampleBasedPromptRetriever
-from pipelines.federated_cross_kg_connector import FederatedCrossKGConnector
-from pipelines.proof_validation_engine import ProofValidationEngine
-from pipelines.reasoning_narrator import ReasoningNarrator
+# Add gen2kgbot to path
+gen2kgbot_path = Path(__file__).parent.parent / "gen2kgbot"
+if str(gen2kgbot_path) not in sys.path:
+    sys.path.insert(0, str(gen2kgbot_path))
+
+# Import validated gen2kgbot components
+from app.utils.sparql_toolkit import run_sparql_query
+from app.utils.graph_nodes import select_similar_classes, interpret_results
+from app.utils.construct_util import get_connected_classes
+import app.utils.config_manager as config
+from core.config import settings
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 router = APIRouter(prefix="/mcp", tags=["MCP Tools"])
-
-# Initialize pipelines (singleton pattern)
-_sparql_executor = None
-_concept_finder = None
-_neighbourhood_retriever = None
-_path_explorer = None
-_ontology_builder = None
-_example_retriever = None
-_federated_connector = None
-_proof_engine = None
-_reasoning_narrator = None
-
-
-def get_sparql_executor() -> SPARQLExecutor:
-    global _sparql_executor
-    if _sparql_executor is None:
-        _sparql_executor = SPARQLExecutor()
-    return _sparql_executor
-
-
-def get_concept_finder() -> SemanticConceptFinder:
-    global _concept_finder
-    if _concept_finder is None:
-        _concept_finder = SemanticConceptFinder()
-    return _concept_finder
-
-
-def get_neighbourhood_retriever() -> NeighbourhoodRetriever:
-    global _neighbourhood_retriever
-    if _neighbourhood_retriever is None:
-        _neighbourhood_retriever = NeighbourhoodRetriever()
-    return _neighbourhood_retriever
-
-
-def get_path_explorer() -> MultiHopPathExplorer:
-    global _path_explorer
-    if _path_explorer is None:
-        _path_explorer = MultiHopPathExplorer()
-    return _path_explorer
-
-
-def get_ontology_builder() -> OntologyContextBuilder:
-    global _ontology_builder
-    if _ontology_builder is None:
-        _ontology_builder = OntologyContextBuilder()
-    return _ontology_builder
-
-
-def get_example_retriever() -> ExampleBasedPromptRetriever:
-    global _example_retriever
-    if _example_retriever is None:
-        _example_retriever = ExampleBasedPromptRetriever()
-    return _example_retriever
-
-
-def get_federated_connector() -> FederatedCrossKGConnector:
-    global _federated_connector
-    if _federated_connector is None:
-        _federated_connector = FederatedCrossKGConnector()
-    return _federated_connector
-
-
-def get_proof_engine() -> ProofValidationEngine:
-    global _proof_engine
-    if _proof_engine is None:
-        _proof_engine = ProofValidationEngine()
-    return _proof_engine
-
-
-def get_reasoning_narrator() -> ReasoningNarrator:
-    global _reasoning_narrator
-    if _reasoning_narrator is None:
-        _reasoning_narrator = ReasoningNarrator()
-    return _reasoning_narrator
 
 
 # ============================================================================
@@ -103,249 +38,373 @@ def get_reasoning_narrator() -> ReasoningNarrator:
 
 class SPARQLQueryRequest(BaseModel):
     query: str = Field(..., description="SPARQL query string")
-    max_retries: int = Field(3, description="Maximum retry attempts")
+    endpoint: Optional[str] = Field(None, description="SPARQL endpoint URL (default: config)")
+    kg_name: Optional[str] = Field(None, description="KG short name for context")
 
 
 class ConceptFinderRequest(BaseModel):
-    query_text: str = Field(..., description="Natural language query")
-    limit: int = Field(10, description="Maximum number of concepts")
-    min_similarity: float = Field(0.5, description="Minimum similarity threshold")
+    query_text: str = Field(..., description="Natural language query or concept name")
+    kg_name: str = Field(..., description="KG short name (grape_demo, grape_hearing, grape_psychiatry, grape_unified)")
+    limit: int = Field(5, description="Maximum number of similar concepts")
 
 
 class NeighbourhoodRequest(BaseModel):
-    concept_uri: str = Field(..., description="URI of the concept")
-    max_depth: int = Field(1, description="Maximum hop distance")
-    include_literals: bool = Field(True, description="Include literal values")
+    concept_uris: List[str] = Field(..., description="List of concept URIs to explore")
+    kg_name: str = Field(..., description="KG short name")
 
 
-class PathExplorerRequest(BaseModel):
-    source_uri: str = Field(..., description="URI of the source concept")
-    target_uri: str = Field(..., description="URI of the target concept")
-    max_hops: int = Field(3, description="Maximum path length")
-    limit: int = Field(10, description="Maximum number of paths")
+class InterpretResultsRequest(BaseModel):
+    question: str = Field(..., description="Original user question")
+    sparql_results: str = Field(..., description="SPARQL results in CSV format")
+    kg_name: str = Field(..., description="KG short name")
 
 
-class OntologyContextRequest(BaseModel):
-    concept_uri: Optional[str] = Field(None, description="URI of specific concept (None for full ontology)")
-    include_hierarchy: bool = Field(True, description="Include class hierarchy")
-    include_properties: bool = Field(True, description="Include properties")
-    include_constraints: bool = Field(True, description="Include domain/range constraints")
+class ExtractEntitiesRequest(BaseModel):
+    question: str = Field(..., description="Natural language question")
+    kg_name: str = Field(..., description="KG short name for context")
 
 
-class ExampleRetrieverRequest(BaseModel):
-    query_text: str = Field(..., description="Natural language question")
-    limit: int = Field(5, description="Maximum number of examples")
-    use_embeddings: bool = Field(True, description="Use embedding-based search")
-
-
-class FederatedQueryRequest(BaseModel):
-    local_pattern: str = Field(..., description="SPARQL pattern for local KG")
-    remote_endpoint_name: str = Field(..., description="Name of registered remote endpoint")
-    remote_pattern: str = Field(..., description="SPARQL pattern for remote KG")
-    join_variable: Optional[str] = Field(None, description="Variable to join on")
-
-
-class ValidationRequest(BaseModel):
-    subject_uri: str = Field(..., description="URI of the subject")
-    predicate_uri: str = Field(..., description="URI of the predicate")
-    object_uri: str = Field(..., description="URI of the object")
-    include_reasoning: bool = Field(True, description="Use reasoning/inference")
-
-
-class NarratorRequest(BaseModel):
-    nodes: List[Dict[str, Any]] = Field(..., description="List of nodes in the reasoning path")
-    links: List[Dict[str, Any]] = Field(..., description="List of edges/relationships")
-    steps: Optional[List[str]] = Field(None, description="Optional reasoning step descriptions")
+class ConfigureKGRequest(BaseModel):
+    kg_name: str = Field(..., description="KG short name")
+    endpoint: str = Field(..., description="SPARQL endpoint URL")
+    description: Optional[str] = Field(None, description="KG description")
 
 
 # ============================================================================
-# Endpoints
+# Helper Functions
 # ============================================================================
 
 
-@router.post("/sparql", response_model=List[Dict[str, Any]])
-async def execute_sparql(request: SPARQLQueryRequest):
-    """Execute a SPARQL query against the knowledge graph."""
-    try:
-        executor = get_sparql_executor()
-        results = await executor.execute(request.query, request.max_retries)
-        return results
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def configure_gen2kgbot_for_kg(kg_name: str, endpoint: Optional[str] = None):
+    """Configure gen2kgbot for a specific KG."""
+    config.config["kg_short_name"] = kg_name
+
+    if endpoint:
+        config.config["kg_sparql_endpoint_url"] = endpoint
+        config.config["ontologies_sparql_endpoint_url"] = endpoint
+    else:
+        # Use default endpoints based on kg_name
+        if kg_name == "grape_demo":
+            config.config["kg_sparql_endpoint_url"] = "http://localhost:7200/repositories/demo"
+        elif kg_name == "grape_hearing":
+            config.config["kg_sparql_endpoint_url"] = "http://localhost:7200/repositories/hearing"
+        elif kg_name == "grape_psychiatry":
+            config.config["kg_sparql_endpoint_url"] = "http://localhost:7200/repositories/psychiatry"
+        elif kg_name == "grape_unified":
+            config.config["kg_sparql_endpoint_url"] = "http://localhost:7200/repositories/unified"
+        else:
+            raise ValueError(f"Unknown KG name: {kg_name}. Use grape_demo, grape_hearing, grape_psychiatry, or grape_unified")
+
+        config.config["ontologies_sparql_endpoint_url"] = config.config["kg_sparql_endpoint_url"]
 
 
-@router.post("/concepts", response_model=List[Dict[str, Any]])
-async def find_concepts(request: ConceptFinderRequest):
-    """Find concepts semantically similar to the query."""
+async def extract_entities_with_llm(question: str, kg_description: str = "") -> List[str]:
+    """Extract medical entities from question using Gemini LLM."""
     try:
-        finder = get_concept_finder()
-        concepts = await finder.find(
-            request.query_text, request.limit, request.min_similarity
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            google_api_key=settings.google_api_key,
+            temperature=0.0
         )
-        return concepts
+
+        prompt = f"""Extract medical concepts, symptoms, conditions, or treatments from this question.
+Return ONLY a comma-separated list of entities, nothing else.
+
+Knowledge Graph context: {kg_description or "Medical knowledge graph"}
+
+Question: {question}
+
+Entities:"""
+
+        response = llm.invoke(prompt)
+        entities_str = response.content.strip()
+        entities = [e.strip() for e in entities_str.split(",") if e.strip()]
+        return entities
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Fallback: extract capitalized words
+        import re
+        words = re.findall(r'\b[A-Z][a-z]+\b', question)
+        return list(set(words))
+
+
+# ============================================================================
+# MCP Tool Endpoints
+# ============================================================================
+
+
+@router.post("/sparql", response_model=Dict[str, Any])
+async def execute_sparql(request: SPARQLQueryRequest):
+    """
+    Execute a SPARQL query against a knowledge graph.
+
+    Uses: gen2kgbot/app/utils/sparql_toolkit.run_sparql_query()
+    """
+    try:
+        # Configure if kg_name provided
+        if request.kg_name:
+            configure_gen2kgbot_for_kg(request.kg_name, request.endpoint)
+            endpoint = config.get_kg_sparql_endpoint_url()
+        else:
+            endpoint = request.endpoint or settings.kg_sparql_endpoint_url
+
+        # Execute SPARQL query (returns CSV string)
+        csv_results = run_sparql_query(request.query, endpoint)
+
+        # Parse CSV to list of dicts
+        lines = csv_results.strip().split("\n")
+        if not lines:
+            return {"results": [], "count": 0}
+
+        headers = [h.strip() for h in lines[0].split(",")]
+        results = []
+
+        for line in lines[1:]:
+            if line.strip():
+                values = [v.strip() for v in line.split(",")]
+                row = {headers[i]: values[i] if i < len(values) else "" for i in range(len(headers))}
+                results.append(row)
+
+        return {
+            "results": results,
+            "count": len(results),
+            "query": request.query,
+            "endpoint": endpoint
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SPARQL execution failed: {str(e)}")
+
+
+@router.post("/concepts", response_model=Dict[str, Any])
+async def find_concepts(request: ConceptFinderRequest):
+    """
+    Find concepts semantically similar to query text using embeddings.
+
+    Uses: gen2kgbot/app/utils/graph_nodes.select_similar_classes()
+    """
+    try:
+        # Configure gen2kgbot for the specified KG
+        configure_gen2kgbot_for_kg(request.kg_name)
+
+        # Create state dict for gen2kgbot
+        state = {
+            "initial_question": request.query_text,
+            "relevant_entities": [request.query_text]  # Use query as entity
+        }
+
+        # Call gen2kgbot's similarity search
+        updated_state = select_similar_classes(state)
+
+        # Extract similar classes
+        similar_classes = updated_state.get("similar_classes_list", [])
+
+        # Format response
+        concepts = []
+        for cls_uri, cls_label, cls_description in similar_classes[:request.limit]:
+            concepts.append({
+                "uri": cls_uri,
+                "label": cls_label or cls_uri.split("/")[-1].split("#")[-1],
+                "description": cls_description
+            })
+
+        return {
+            "concepts": concepts,
+            "count": len(concepts),
+            "query": request.query_text,
+            "kg": request.kg_name
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Concept finding failed: {str(e)}")
 
 
 @router.post("/neighbourhood", response_model=Dict[str, Any])
 async def retrieve_neighbourhood(request: NeighbourhoodRequest):
-    """Retrieve the neighbourhood of a concept."""
+    """
+    Retrieve connected classes for given concept URIs.
+
+    Uses: gen2kgbot/app/utils/construct_util.get_connected_classes()
+    """
     try:
-        retriever = get_neighbourhood_retriever()
-        result = await retriever.retrieve(
-            request.concept_uri, request.max_depth, request.include_literals
-        )
-        return result
+        # Configure gen2kgbot
+        configure_gen2kgbot_for_kg(request.kg_name)
+
+        # Get connected classes
+        connected = get_connected_classes(request.concept_uris)
+
+        # Format response
+        neighbours = []
+        for cls_uri, cls_label, cls_description in connected:
+            neighbours.append({
+                "uri": cls_uri,
+                "label": cls_label or cls_uri.split("/")[-1].split("#")[-1],
+                "description": cls_description
+            })
+
+        return {
+            "neighbours": neighbours,
+            "count": len(neighbours),
+            "seed_concepts": request.concept_uris,
+            "kg": request.kg_name
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Neighbourhood retrieval failed: {str(e)}")
 
 
-@router.post("/paths", response_model=List[Dict[str, Any]])
-async def find_paths(request: PathExplorerRequest):
-    """Find paths between two concepts in the knowledge graph."""
+@router.post("/interpret", response_model=Dict[str, Any])
+async def interpret_sparql_results(request: InterpretResultsRequest):
+    """
+    Convert SPARQL CSV results into natural language explanation.
+
+    Uses: gen2kgbot/app/utils/graph_nodes.interpret_results()
+    """
     try:
-        explorer = get_path_explorer()
-        paths = await explorer.find_paths(
-            request.source_uri, request.target_uri, request.max_hops, request.limit
-        )
-        return paths
+        # Configure gen2kgbot
+        configure_gen2kgbot_for_kg(request.kg_name)
+
+        # Create state for interpret_results
+        state = {
+            "initial_question": request.question,
+            "sparql_answer": request.sparql_results,
+            "scenario": "scenario_custom"  # Generic scenario
+        }
+
+        # Call gen2kgbot's interpretation
+        updated_state = interpret_results(state)
+
+        interpretation = updated_state.get("final_answer", "No interpretation generated")
+
+        return {
+            "interpretation": interpretation,
+            "question": request.question,
+            "kg": request.kg_name,
+            "results_count": len(request.sparql_results.strip().split("\n")) - 1
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Interpretation failed: {str(e)}")
 
 
-@router.post("/ontology", response_model=Dict[str, Any])
-async def build_ontology_context(request: OntologyContextRequest):
-    """Build ontology context for a concept or the entire ontology."""
+@router.post("/extract_entities", response_model=Dict[str, Any])
+async def extract_entities(request: ExtractEntitiesRequest):
+    """
+    Extract named entities from question using LLM.
+
+    Uses: Gemini LLM for intelligent entity extraction (replaces Spacy NER)
+    """
     try:
-        builder = get_ontology_builder()
-        context = await builder.build(
-            request.concept_uri,
-            request.include_hierarchy,
-            request.include_properties,
-            request.include_constraints,
-        )
-        return context
+        # Get KG description for context
+        kg_descriptions = {
+            "grape_demo": "General medical knowledge graph with common conditions",
+            "grape_hearing": "Hearing & Tinnitus knowledge graph with audiology concepts",
+            "grape_psychiatry": "Mental health knowledge graph with psychiatric conditions",
+            "grape_unified": "Unified medical knowledge graph combining all domains"
+        }
+
+        kg_desc = kg_descriptions.get(request.kg_name, "Medical knowledge graph")
+
+        # Extract entities using LLM
+        entities = await extract_entities_with_llm(request.question, kg_desc)
+
+        return {
+            "entities": entities,
+            "count": len(entities),
+            "question": request.question,
+            "kg": request.kg_name
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Entity extraction failed: {str(e)}")
 
 
-@router.post("/examples", response_model=List[Dict[str, Any]])
-async def retrieve_examples(request: ExampleRetrieverRequest):
-    """Retrieve similar SPARQL query examples for few-shot learning."""
+@router.post("/configure", response_model=Dict[str, Any])
+async def configure_kg(request: ConfigureKGRequest):
+    """
+    Configure gen2kgbot to work with a specific knowledge graph.
+
+    Allows dynamic switching between KGs or connecting to external SPARQL endpoints.
+    """
     try:
-        retriever = get_example_retriever()
-        examples = await retriever.retrieve(
-            request.query_text, request.limit, request.use_embeddings
-        )
-        return examples
+        configure_gen2kgbot_for_kg(request.kg_name, request.endpoint)
+
+        if request.description:
+            config.config["kg_description"] = request.description
+
+        return {
+            "status": "configured",
+            "kg_name": request.kg_name,
+            "endpoint": config.get_kg_sparql_endpoint_url(),
+            "description": config.config.get("kg_description", "")
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/federated", response_model=List[Dict[str, Any]])
-async def query_federated(request: FederatedQueryRequest):
-    """Query across multiple knowledge graphs using SPARQL federation."""
-    try:
-        connector = get_federated_connector()
-        results = await connector.federated_query(
-            request.local_pattern,
-            request.remote_endpoint_name,
-            request.remote_pattern,
-            request.join_variable,
-        )
-        return results
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/validate", response_model=Dict[str, Any])
-async def validate_assertion(request: ValidationRequest):
-    """Validate if an assertion (triple) exists in the knowledge graph."""
-    try:
-        engine = get_proof_engine()
-        result = await engine.validate_assertion(
-            request.subject_uri,
-            request.predicate_uri,
-            request.object_uri,
-            request.include_reasoning,
-        )
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/narrate", response_model=Dict[str, Any])
-async def narrate_reasoning(request: NarratorRequest):
-    """Transform execution traces into natural language explanations."""
-    try:
-        narrator = get_reasoning_narrator()
-        narrative = narrator.narrate_path(
-            request.nodes, request.links, request.steps
-        )
-        return narrative
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Configuration failed: {str(e)}")
 
 
 @router.get("/tools")
 async def list_tools():
-    """List all available MCP tools."""
+    """List all available MCP tools with their descriptions."""
     return {
-        "total": 9,
+        "total": 6,
         "tools": [
             {
                 "name": "execute_sparql",
                 "endpoint": "/api/mcp/sparql",
-                "description": "Execute SPARQL queries",
+                "description": "Execute SPARQL queries against knowledge graphs",
                 "method": "POST",
+                "gen2kgbot_component": "sparql_toolkit.run_sparql_query"
             },
             {
                 "name": "find_concepts",
                 "endpoint": "/api/mcp/concepts",
-                "description": "Find concepts using embeddings",
+                "description": "Find concepts using semantic similarity (embeddings)",
                 "method": "POST",
+                "gen2kgbot_component": "graph_nodes.select_similar_classes"
             },
             {
                 "name": "retrieve_neighbourhood",
                 "endpoint": "/api/mcp/neighbourhood",
-                "description": "Get connected nodes",
+                "description": "Get classes connected to seed concepts",
                 "method": "POST",
+                "gen2kgbot_component": "construct_util.get_connected_classes"
             },
             {
-                "name": "find_paths",
-                "endpoint": "/api/mcp/paths",
-                "description": "Find paths between concepts",
+                "name": "interpret_results",
+                "endpoint": "/api/mcp/interpret",
+                "description": "Convert SPARQL results to natural language",
                 "method": "POST",
+                "gen2kgbot_component": "graph_nodes.interpret_results"
             },
             {
-                "name": "build_ontology_context",
-                "endpoint": "/api/mcp/ontology",
-                "description": "Build ontology context",
+                "name": "extract_entities",
+                "endpoint": "/api/mcp/extract_entities",
+                "description": "Extract medical entities from questions using LLM",
                 "method": "POST",
+                "gen2kgbot_component": "ChatGoogleGenerativeAI (replaces Spacy)"
             },
             {
-                "name": "retrieve_examples",
-                "endpoint": "/api/mcp/examples",
-                "description": "Get query examples for few-shot learning",
+                "name": "configure_kg",
+                "endpoint": "/api/mcp/configure",
+                "description": "Switch between KGs or connect to external endpoints",
                 "method": "POST",
-            },
-            {
-                "name": "query_federated",
-                "endpoint": "/api/mcp/federated",
-                "description": "Query across multiple KGs",
-                "method": "POST",
-            },
-            {
-                "name": "validate_assertion",
-                "endpoint": "/api/mcp/validate",
-                "description": "Validate triples with proof",
-                "method": "POST",
-            },
-            {
-                "name": "narrate_reasoning",
-                "endpoint": "/api/mcp/narrate",
-                "description": "Generate explanations",
-                "method": "POST",
+                "gen2kgbot_component": "config_manager"
             },
         ],
     }
+
+
+@router.get("/health")
+async def health_check():
+    """Check if MCP tools and gen2kgbot are operational."""
+    try:
+        # Test SPARQL connectivity
+        test_query = "SELECT * WHERE { ?s ?p ?o } LIMIT 1"
+        run_sparql_query(test_query, settings.kg_sparql_endpoint_url)
+
+        return {
+            "status": "healthy",
+            "gen2kgbot": "loaded",
+            "sparql_endpoint": settings.kg_sparql_endpoint_url,
+            "tools_available": 6
+        }
+    except Exception as e:
+        return {
+            "status": "degraded",
+            "error": str(e),
+            "tools_available": 6
+        }

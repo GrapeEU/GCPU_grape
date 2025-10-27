@@ -13,11 +13,14 @@ def extract_relevant_entities_spacy(question: str) -> list[str]:
     """
 
     # Load the pre-trained spaCy model (en_core_web_sm is a small English model)
-    # nlp = spacy.load("en_core_web_sm")
-    # nlp = spacy.load("en_core_web_lg")
-    # nlp = spacy.load("en_ner_craft_md")
-    # nlp = spacy.load("en_ner_bionlp13cg_md")
-    nlp = spacy.load("en_core_sci_lg")  # YT works best
+    # Try models in order of preference
+    try:
+        nlp = spacy.load("en_core_sci_lg")  # YT works best
+    except OSError:
+        try:
+            nlp = spacy.load("en_core_web_lg")
+        except OSError:
+            nlp = spacy.load("en_core_web_sm")  # Fallback to small model
 
     # Process the question through the spaCy pipeline
     # TODO: model should be loaded only once, not at each invokation

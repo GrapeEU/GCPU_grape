@@ -39,43 +39,11 @@ WHERE {
     { ?class a owl:Class . } UNION { ?class a rdfs:Class . }
     FILTER(isIRI(?class))   # Ignore anonymous classes that are mostly owl constructs
 
-    OPTIONAL {
-        { SELECT DISTINCT ?class ?lbl WHERE {
-          { ?class rdfs:label ?lbl }
-          UNION
-          { ?class skos:prefLabel ?lbl }
-          UNION
-          { ?class skos:altLabel ?lbl }
-          UNION
-          { ?class schema:name ?lbl }
-          UNION
-          { ?class schema:alternateName ?lbl }
-          UNION
-          { ?class obo:IAO_0000118 ?lbl }       # alt label
-          UNION
-          { ?class obo:OBI_9991118 ?lbl }       # IEDB alternative term
-          UNION
-          { ?class obo:OBI_0001847 ?lbl }       # ISA alternative term
-        }}
-     }
-     BIND(COALESCE(str(?lbl), "None") as ?lbl_str)
+    OPTIONAL { ?class rdfs:label ?lbl }
+    BIND(COALESCE(str(?lbl), "None") as ?lbl_str)
 
-    OPTIONAL {
-         { SELECT DISTINCT ?class ?comment WHERE {
-          { ?class rdfs:comment ?comment }
-          UNION
-          { ?class skos:definition ?comment }
-          UNION
-          { ?class dc:description ?comment }
-          UNION
-          { ?class dcterms:description ?comment }
-          UNION
-          { ?class schema:description ?comment }
-          UNION
-          { ?class obo:IAO_0000115 ?comment }   # definition
-          }}
-     }
-      BIND(COALESCE(str(?comment), "None") as ?comment_str)
+    OPTIONAL { ?class rdfs:comment ?comment }
+    BIND(COALESCE(str(?comment), "None") as ?comment_str)
 
     #FILTER (?comment_str != "None" && ?lbl_str != "None")   # removes lots of deprecated classes, but is it a good idea?
 
@@ -115,43 +83,11 @@ WHERE {
         OPTIONAL { ?range rdfs:label ?range_lbl }
     }
 
-    OPTIONAL {
-         { SELECT DISTINCT ?prop ?lbl WHERE {
-          { ?prop rdfs:label ?lbl }
-          UNION
-          { ?prop skos:prefLabel ?lbl }
-          UNION
-          { ?prop skos:altLabel ?lbl }
-          UNION
-          { ?prop schema:name ?lbl }
-          UNION
-          { ?prop schema:alternateName ?lbl }
-          UNION
-          { ?prop obo:IAO_0000118 ?lbl }       # alt label
-          UNION
-          { ?prop obo:OBI_9991118 ?lbl }       # IEDB alternative term
-          UNION
-          { ?prop obo:OBI_0001847 ?lbl }       # ISA alternative term
-          }}
-     }
-     BIND(COALESCE(str(?lbl), "None") as ?lbl_str)
+    OPTIONAL { ?prop rdfs:label ?lbl }
+    BIND(COALESCE(str(?lbl), "None") as ?lbl_str)
 
-    OPTIONAL {
-         { SELECT DISTINCT ?prop ?comment WHERE {
-          { ?prop rdfs:comment ?comment }
-          UNION
-          { ?prop skos:definition ?comment }
-          UNION
-          { ?prop dc:description ?comment }
-          UNION
-          { ?prop dcterms:description ?comment }
-          UNION
-          { ?prop schema:description ?comment }
-          UNION
-          { ?prop obo:IAO_0000115 ?comment }   # definition
-          }}
-     }
-      BIND(COALESCE(str(?comment), "None") as ?comment_str)
+    OPTIONAL { ?prop rdfs:comment ?comment }
+    BIND(COALESCE(str(?comment), "None") as ?comment_str)
 
     #FILTER (?comment_str != "None" && ?lbl_str != "None")
 
