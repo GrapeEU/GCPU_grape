@@ -13,11 +13,11 @@ All execution steps are logged for debugging and frontend display.
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from core.config import settings
 from core.agent_executor import AgentExecutor
 from core.agent_logger import AgentLogger, StepType
+from core.vertex_ai_config import get_vertex_ai_chat_model
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
@@ -26,17 +26,12 @@ router = APIRouter(prefix="/agent", tags=["Agent"])
 executor = AgentExecutor()
 
 
-# Initialize Gemini for chat
+# Initialize Vertex AI for chat
 def get_gemini_llm():
-    """Get Gemini LLM instance for chat."""
-    api_key = settings.gemini_api_key or settings.google_api_key
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY not set in .env file")
-
-    return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        google_api_key=api_key,
-        temperature=0.7,
+    """Get Gemini LLM instance via Vertex AI for chat."""
+    return get_vertex_ai_chat_model(
+        model_name="gemini-2.5-flash",
+        temperature=0.7
     )
 
 

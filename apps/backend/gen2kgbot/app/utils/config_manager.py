@@ -13,7 +13,8 @@ from langchain_core.vectorstores import VectorStore
 from langchain_community.vectorstores import FAISS
 from langchain_chroma import Chroma
 from langgraph.graph.state import CompiledStateGraph
-from langchain_google_genai import ChatGoogleGenerativeAI
+import vertexai
+from langchain_google_vertexai import ChatVertexAI
 from app.utils.envkey_manager import (
     get_deepseek_key,
     get_google_key,
@@ -463,11 +464,21 @@ def get_seq2seq_model_by_config_id(model_config_id: str) -> BaseChatModel:
         llm_config = ChatHuggingFace(llm=hfe)
 
     elif server_type == "google":
-        llm_config = ChatGoogleGenerativeAI(
+        # Initialize Vertex AI for Google models
+        # Try to get project ID from environment, fallback to default
+        import os
+        gcp_project_id = os.environ.get("GCP_PROJECT_ID", "brave-streamer-474620-c1")
+        vertex_ai_location = os.environ.get("VERTEX_AI_LOCATION", "us-central1")
+
+        vertexai.init(
+            project=gcp_project_id,
+            location=vertex_ai_location
+        )
+
+        llm_config = ChatVertexAI(
             model=model_id,
             temperature=temperature,
             max_retries=max_retries,
-            api_key=get_google_key(),
             verbose=True,
             top_p=top_p,
             model_kwargs=model_kwargs,

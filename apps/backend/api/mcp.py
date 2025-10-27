@@ -28,7 +28,7 @@ from app.utils.graph_nodes import select_similar_classes
 from app.utils.construct_util import get_connected_classes, prefixed_to_fulliri
 import app.utils.config_manager as config
 from core.config import settings
-from langchain_google_genai import ChatGoogleGenerativeAI
+from core.vertex_ai_config import get_vertex_ai_chat_model
 from langchain_core.messages import HumanMessage
 
 router = APIRouter(prefix="/mcp", tags=["MCP Tools"])
@@ -115,11 +115,10 @@ def configure_gen2kgbot_for_kg(kg_name: str, endpoint: Optional[str] = None):
 
 
 async def extract_entities_with_llm(question: str, kg_description: str = "") -> List[str]:
-    """Extract medical entities from question using Gemini LLM."""
+    """Extract medical entities from question using Gemini LLM via Vertex AI."""
     try:
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=settings.google_api_key,
+        llm = get_vertex_ai_chat_model(
+            model_name="gemini-2.5-flash",
             temperature=0.0
         )
 
@@ -322,14 +321,9 @@ async def interpret_sparql_results(request: InterpretResultsRequest):
         # Keep gen2kgbot configuration in sync (sets KG metadata used elsewhere)
         configure_gen2kgbot_for_kg(request.kg_name)
 
-        api_key = settings.gemini_api_key or settings.google_api_key
-        if not api_key:
-            raise HTTPException(status_code=500, detail="GEMINI_API_KEY or GOOGLE_API_KEY not configured")
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=api_key,
-            temperature=0.2,
+        llm = get_vertex_ai_chat_model(
+            model_name="gemini-2.5-flash",
+            temperature=0.2
         )
 
         csv_content = request.sparql_results.strip()

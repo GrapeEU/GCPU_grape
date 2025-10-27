@@ -50,8 +50,13 @@ services:
       - GRAPHDB_REPO_PSYCHIATRY=http://graphdb:7200/repositories/psychiatry
       - GRAPHDB_REPO_UNIFIED=http://graphdb:7200/repositories/unified
       - OLLAMA_HOST=http://ollama:11434
+      # GCP Service Account for Vertex AI
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-service-account.json
     env_file:
       - ./apps/backend/.env
+    volumes:
+      # Mount GCP Service Account key
+      - ./gcp-service-account.json:/app/gcp-service-account.json:ro
     networks:
       - grape-network
     depends_on:
