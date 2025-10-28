@@ -44,6 +44,7 @@ env/
 .env.*.local
 *.env
 !.env.example
+!*.env.example
 
 # Testing
 .pytest_cache/
@@ -138,4 +139,6 @@ secrets/
 *.key
 *.crt
 credentials.json
-service-account.json
+service-account.json# GCP Service Account Keys - NEVER COMMIT THESE!
+gcp-service-account.json
+*service-account*.json
