@@ -87,6 +87,7 @@ const REPO_COLORS: Record<string, string> = {
 
 export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: GraphVisualizerProps) {
   const { theme } = useTheme();
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,7 +194,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
       try {
         const responses = await Promise.all(
           selectedRepos.map(async repo => {
-            const response = await fetch(`http://localhost:8000/api/graph/${repo}/data`);
+            const response = await fetch(`${apiBaseUrl}/api/graph/${repo}/data`);
             if (!response.ok) {
               throw new Error(`Failed to load repository ${repo}`);
             }
@@ -288,7 +289,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
     };
 
     loadRepoGraphs();
-  }, [scenarioData, selectedRepos]);
+  }, [scenarioData, selectedRepos, apiBaseUrl]);
 
   useEffect(() => {
     if (!selectedNode) {
@@ -317,7 +318,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
       setDetailsLoading(true);
       setDetailsError(null);
       try {
-        const response = await fetch(`http://localhost:8000/api/graph/${repoForDetails}/node?id=${encodeURIComponent(selectedNode.id)}`);
+        const response = await fetch(`${apiBaseUrl}/api/graph/${repoForDetails}/node?id=${encodeURIComponent(selectedNode.id)}`);
         if (!response.ok) {
           throw new Error('Unable to load node details');
         }
@@ -340,7 +341,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
     };
 
     fetchDetails();
-  }, [selectedNode, selectedRepos, scenarioData]);
+  }, [selectedNode, selectedRepos, scenarioData, apiBaseUrl]);
 
   const handleNodeClick = useCallback((node: any) => {
     setSelectedNode(node);
