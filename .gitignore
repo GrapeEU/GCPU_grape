@@ -44,6 +44,7 @@ env/
 .env.*.local
 *.env
 !.env.example
+!*.env.example
 
 # Testing
 .pytest_cache/
