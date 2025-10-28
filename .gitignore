@@ -138,4 +138,6 @@ secrets/
 *.key
 *.crt
 credentials.json
-service-account.json
+service-account.json# GCP Service Account Keys - NEVER COMMIT THESE!
+gcp-service-account.json
+*service-account*.json
