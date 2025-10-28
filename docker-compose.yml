@@ -81,7 +81,7 @@ services:
       - web-next:/app/.next
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
       - HOSTNAME=0.0.0.0
     command: npm run dev -- --hostname 0.0.0.0
     networks:
