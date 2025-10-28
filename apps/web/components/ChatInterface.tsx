@@ -58,6 +58,7 @@ const scenarioProgressMap: Record<string, string[]> = {
 };
 
 export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatInterfaceProps) {
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -86,7 +87,7 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
 
   const executeScenario = async (question: string, kgName: string) => {
     try {
-      const response = await fetch('http://localhost:8000/api/agent/query', {
+      const response = await fetch(`${apiBaseUrl}/api/agent/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -181,7 +182,7 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
     onScenarioResult?.(null);
 
     try {
-      const response = await fetch('http://localhost:8000/api/agent/chat', {
+      const response = await fetch(`${apiBaseUrl}/api/agent/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
