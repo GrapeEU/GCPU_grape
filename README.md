@@ -1,120 +1,139 @@
 # 🍇 Grape
 
-> **This project is developed for the Google Cloud University Hackathon 2025.**
+> Google Cloud University Hackathon 2025 · Knowledge-graph powered medical reasoning agent
 
 ---
 
-![alt text](docs/grape_cover.png)
+![Grape cover](docs/grape_cover.png)
+
 ## Overview
 
-**Grape** is an AI-powered reasoning agent built around a **central RDF knowledge graph**.  
-It aims to **break down silos between medical disciplines** by connecting symptoms, diagnoses, and treatments across heterogeneous knowledge bases.  
+Grape is an end‑to‑end demo of a graph‑centric AI assistant.  
+The backend orchestrates deterministic scenarios over several RDF repositories, while the frontend streams MCP traces and renders the exact nodes/edges that powered each answer.
 
-Unlike traditional LLM-based assistants, **Grape treats the knowledge graph as its foundation of truth**, using it for:
-- Logical inference and relation verification  
-- Transparent argumentation (every answer is grounded in graph data)  
-- Discovering novel, cross-disciplinary connections between medical domains  
+Out of the box we ship three knowledge graphs (`hearing`, `psychiatry`, `unified`) plus a small demo graph.  
+All scenarios run without “hallucination” because they ground every answer in SPARQL results.
 
 ---
 
-## Features
+## Key capabilities
 
--  **Knowledge Graph Core:** Built on RDF/OWL for interoperability and inference  
--  **Agent Integration:** Uses reasoning to query and verify relations dynamically  
--  **Medical Insight Discovery:** Links symptoms and pathologies across specialties  
--  **Explainable AI:** Every result includes graph-backed justification  
--  **Google Cloud Integration:** Uses GCP services for storage, querying, and deployment  
+- **Scenario 1 – Neighbourhood Exploration**  
+  Given a concept URI, retrieves nearby symptoms, interventions, risk factors, and tests.
 
----
+- **Scenario 2 – Multi-hop Path Finding (Demo)**  
+  Finds multi-hop paths (up to 3 hops) between Chronic Stress and Hearing Loss inside the unified graph and explains the link.
 
-##  Architecture
+- **Scenario 3 – Federated Cross-KG Alignment (Demo)**  
+  Surfaces deterministic owl:sameAs pairs between the hearing and psychiatry repositories.
 
-1. **Knowledge Layer (RDF Graph)** — Medical ontologies and datasets integrated into a unified graph  
-2. **Inference Engine** — SPARQL queries + logical reasoning (e.g., via OWL reasoners or custom rules)  
-3. **Agent Interface** — LLM interface (text or chat) connected to the reasoning backend  
-4. **Cloud Infrastructure** — Hosted on Google Cloud (BigQuery + Cloud Run + Vertex AI optional)  
+- **Scenario 4 – Conversational Agent**  
+  The `/api/agent/chat` endpoint leverages scenario detection, embeddings, MCP tools, and returns formatted traces that match the UI timeline.
 
----
+- **MCP Tool suite** (`/api/mcp/*`)  
+  - `extract_entities` → LLM/regex hybrid entity extractor  
+  - `concepts` → FAISS semantic lookup over class descriptions (powered by Ollama `nomic-embed-text`)  
+  - `neighbourhood` → Retrieves connected classes + caches turtle snippets  
+  - `sparql` → Runs deterministic queries against the selected repository  
+  - `interpret` → Summarises SPARQL results into human-readable explanations
 
-##  Example Use Case
-
-> *A patient presents with chronic fatigue and joint pain.*  
-> Grape queries its graph, finds links between rheumatology and endocrinology, and suggests potential autoimmune pathways or thyroid correlations — all **backed by verifiable graph relations**.
-
----
-
-##  Tech Stack
-
-- **Language:** Python / TypeScript  
-- **Knowledge Graph:** RDF, OWL, SPARQL  
-- **Storage:** Google Cloud Storage / Firestore  
-- **Agent Framework:** LangChain / Semantic Kernel / custom LLM logic  
-- **Infra:** Google Cloud Run + Vertex AI  
+- **Dynamic graph visualiser**  
+  Next.js + `react-force-graph` component that colour-codes nodes by repository, shows execution traces, and fetches node ontology on demand.
 
 ---
 
-##  Setup
+## Architecture (high level)
 
-## Development Setup
-
-### Prerequisites
-
-- Docker and Docker Compose
-- Make (optional, but recommended)
-
-### Quick Start with Docker
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-repo/grape.git
-   cd grape
-   ```
-
-2. Configure environment variables:
-   ```bash
-   cp apps/backend/.env.example apps/backend/.env
-   # Edit apps/backend/.env with your credentials
-   ```
-
-3. Start all services:
-   ```bash
-   make up
-   # or
-   docker-compose up -d
-   ```
-
-4. Access the applications:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
-
-### Development Commands
-
-```bash
-make help        # Show all available commands
-make up          # Start services
-make down        # Stop services
-make logs        # View logs
-make test-web    # Run frontend tests
-make test-api    # Run backend tests
-make lint-web    # Lint frontend
-make lint-api    # Lint backend
+```
+┌──────────────┐   WebSockets & REST   ┌────────────────┐   SPARQL/HTTP   ┌─────────────┐
+│ Next.js UI   ├──────────────────────▶│ FastAPI Backend├────────────────▶│ GraphDB KGs │
+│ • Chat       │                       │ • Scenario core│                 │ hearing ... │
+│ • Graph view │◀──────────────────────┤ • MCP tools    │                 └─────────────┘
+└──────────────┘   JSON traces          └───────┬────────┘
+                                               │
+                                               │ Embedding lookups
+                                               ▼
+                                         Ollama (nomic-embed-text)
 ```
 
-### Project Structure
+- **Frontend** (`apps/web`)  
+  Next.js 14 + Tailwind, chat interface, graph visualiser, MCP timeline.
+
+- **Backend** (`apps/backend`)  
+  FastAPI with scenario orchestrator, MCP endpoints, FAISS embedding index, asynchronous SPARQL pipeline.
+
+- **Knowledge store**  
+  GraphDB 10.7 running four repositories: `demo`, `hearing`, `psychiatry`, `unified`.
+
+- **Embeddings**  
+  Generated via `scripts/generate_grape_embeddings.py`, stored under `apps/backend/gen2kgbot/data/...`.
+
+---
+
+## Installation
+
+A detailed guide is available in **[docs/installation.md](docs/installation.md)**.  
+It covers:
+
+1. Cloning the repository and exporting `NEXT_PUBLIC_API_URL`, `CORS_ORIGINS`, etc.
+2. Starting the Docker stack (`docker compose up -d`) and verifying the services.
+3. Loading TTL files into GraphDB (`make load-kg`).
+4. Installing backend dependencies (`apps/backend/install.sh`) and regenerating embeddings via `uv run scripts/generate_grape_embeddings.py`.
+5. Pulling the `nomic-embed-text` Ollama model (`docker compose exec ollama ollama pull nomic-embed-text`).
+
+Use that document whenever you deploy to a new machine.
+
+---
+
+## Quick commands
+
+```bash
+# Start / stop services
+make up
+make down
+
+# Load knowledge graphs into GraphDB
+make load-kg
+
+# Regenerate embeddings after KG updates
+cd apps/backend
+uv run scripts/generate_grape_embeddings.py
+
+# Restart web container with a custom API host
+export NEXT_PUBLIC_API_URL=http://34.155.101.97:8000
+docker compose up -d --build web
+```
+
+Service URLs (default):  
+Frontend → http://localhost:3000 • Backend → http://localhost:8000 • GraphDB → http://localhost:7200
+
+---
+
+## Repository layout
 
 ```
 grape/
 ├── apps/
-│   ├── web/              # Next.js frontend
-│   └── backend/          # FastAPI backend
-├── docker-compose.yml    # Service orchestration
-└── Makefile             # Development commands
+│   ├── backend/        # FastAPI backend, MCP tools, scenarios
+│   └── web/            # Next.js frontend (chat + graph)
+├── docs/
+│   ├── installation.md # Deployment guide
+│   └── grape_cover.png
+├── kg_example/         # TTL files imported into GraphDB
+├── scripts/
+│   ├── create_repos.py
+│   ├── setup_graphdb.sh
+│   └── generate_grape_embeddings.py
+├── docker-compose.yml
+└── Makefile
 ```
 
-## Legacy Setup
+---
 
-```bash
-git clone https://github.com/<your-repo>/grape.git
-cd grape
-pip install -r requirements.txt
+## Contributing / Support
+
+- Open issues for bug reports, deployment questions, or feature requests.
+- PRs are welcome—especially new KG scenarios or MCP tool improvements.
+- For internal hackathon teams, ping us on the shared Slack.
+
+Enjoy exploring 🍇 Grape!
