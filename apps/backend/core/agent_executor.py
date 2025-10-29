@@ -13,11 +13,11 @@ import re
 import httpx
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set, Tuple
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from core.config import settings
 from core.agent_logger import AgentLogger, StepType, StepStatus
+from core.vertex_ai_config import get_vertex_ai_chat_model
 
 
 class AgentExecutor:
@@ -54,11 +54,9 @@ class AgentExecutor:
             ]
         }
 
-        # Initialize Gemini LLM for orchestration
-        api_key = settings.gemini_api_key or settings.google_api_key
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=api_key,
+        # Initialize Vertex AI LLM for orchestration
+        self.llm = get_vertex_ai_chat_model(
+            model_name="gemini-2.5-flash",
             temperature=0.0  # Deterministic for tool calling
         )
 

@@ -140,3 +140,5 @@ secrets/
 *.crt
 credentials.json
 service-account.json
+gcp-service-account.json
+*service-account*.json
