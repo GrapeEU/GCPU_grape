@@ -43,7 +43,7 @@ def init_vertex_ai():
 
 
 @lru_cache(maxsize=1)
-def get_vertex_ai_chat_model(model_name: str = "gemini-2.5-flash", temperature: float = 0.7):
+def get_vertex_ai_chat_model(model_name: str = "gemini-2.5-pro", temperature: float = 0.7):
     """
     Get a cached Vertex AI chat model instance.
 

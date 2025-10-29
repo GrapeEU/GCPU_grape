@@ -30,7 +30,7 @@ executor = AgentExecutor()
 def get_gemini_llm():
     """Get Gemini LLM instance via Vertex AI for chat."""
     return get_vertex_ai_chat_model(
-        model_name="gemini-2.5-flash",
+        model_name="gemini-2.5-pro",
         temperature=0.7
     )
 
@@ -239,7 +239,7 @@ async def agent_status():
         "status": "operational",
         "scenarios_loaded": len(executor.scenarios),
         "mcp_endpoint": executor.base_url,
-        "llm_model": "gemini-2.5-flash",
+        "llm_model": "gemini-2.5-pro",
         "available_kgs": [
             "grape_demo",
             "grape_hearing",

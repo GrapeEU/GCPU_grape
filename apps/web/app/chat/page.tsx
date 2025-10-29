@@ -55,7 +55,7 @@ export default function ChatPage() {
                 width={40}
                 height={40}
                 priority
-                className={isDark ? 'invert' : ''}
+                className={`${isDark ? 'invert' : ''} h-10 w-10`}
               />
               <span className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>Grape</span>
             </Link>

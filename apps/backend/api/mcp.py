@@ -70,6 +70,7 @@ class InterpretResultsRequest(BaseModel):
     sparql_results: str = Field(..., description="SPARQL results in CSV format")
     kg_name: str = Field(..., description="KG short name")
     scenario_id: Optional[str] = Field(None, description="(Reserved) scenario hint for compatibility")
+    guidance: Optional[str] = Field(None, description="Optional instructions influencing the interpretation style")
 
 
 class ExtractEntitiesRequest(BaseModel):
@@ -118,7 +119,7 @@ async def extract_entities_with_llm(question: str, kg_description: str = "") -> 
     """Extract medical entities from question using Gemini LLM via Vertex AI."""
     try:
         llm = get_vertex_ai_chat_model(
-            model_name="gemini-2.5-flash",
+            model_name="gemini-2.5-pro",
             temperature=0.0
         )
 
@@ -322,7 +323,7 @@ async def interpret_sparql_results(request: InterpretResultsRequest):
         configure_gen2kgbot_for_kg(request.kg_name)
 
         llm = get_vertex_ai_chat_model(
-            model_name="gemini-2.5-flash",
+            model_name="gemini-2.5-pro",
             temperature=0.2
         )
 
@@ -336,6 +337,10 @@ async def interpret_sparql_results(request: InterpretResultsRequest):
                 "Try refining the question or expanding the neighbourhood search."
             )
         else:
+            guidance_block = ""
+            if request.guidance:
+                guidance_block = f"""\nAdditional presentation guidance:\n{request.guidance.strip()}\n"""
+
             prompt = f"""You are a medical knowledge graph assistant helping a user interpret SPARQL results.
 
 Question:
@@ -350,7 +355,7 @@ Please provide:
 1. A concise paragraph (<=4 sentences) answering the question.
 2. Mention the number of result rows ({results_count}) and highlight notable relationships.
 3. Optional bullet list of key facts if it helps clarity.
-Keep the tone factual and helpful."""
+Keep the tone factual and helpful.{guidance_block}"""
 
             response = await llm.ainvoke([HumanMessage(content=prompt)])
             interpretation = response.content.strip() if response and response.content else ""

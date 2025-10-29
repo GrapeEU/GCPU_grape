@@ -13,7 +13,7 @@ import re
 import httpx
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set, Tuple
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 
 from core.config import settings
 from core.agent_logger import AgentLogger, StepType, StepStatus
@@ -42,6 +42,8 @@ class AgentExecutor:
             "tinnitus": "http://example.org/hearing/Tinnitus",
             "generalized anxiety disorder": "http://example.org/psychiatry/GeneralizedAnxietyDisorder",
             "hyperacusis": "http://example.org/hearing/Hyperacusis",
+            "cognitive behavioral therapy": "http://example.org/hearing/CognitiveBehavioralTherapy",
+            "cbt": "http://example.org/hearing/CognitiveBehavioralTherapy",
         }
         self.demo_triggers = {
             "scenario_2_multihop": [
@@ -51,12 +53,22 @@ class AgentExecutor:
             "scenario_3_federation": [
                 "tinnitus",
                 "generalized anxiety disorder"
+            ],
+            "scenario_4_validation": [
+                "hearing loss",
+                "cbt"
             ]
+        }
+        self.demo_scenarios = {
+            "scenario_1_neighbourhood",
+            "scenario_2_multihop",
+            "scenario_3_federation",
+            "scenario_4_validation"
         }
 
         # Initialize Vertex AI LLM for orchestration
         self.llm = get_vertex_ai_chat_model(
-            model_name="gemini-2.5-flash",
+            model_name="gemini-2.5-pro",
             temperature=0.0  # Deterministic for tool calling
         )
 
@@ -191,6 +203,8 @@ Return ONLY the scenario_id (e.g., "scenario_1_neighbourhood"). No explanation n
             return await self._execute_multihop_demo(question, kg_name, logger)
         if scenario_id == "scenario_3_federation" and self._is_demo_question(question, scenario_id):
             return await self._execute_federation_demo(question, kg_name, logger)
+        if scenario_id == "scenario_4_validation" and self._is_demo_question(question, scenario_id):
+            return await self._execute_validation_demo(question, kg_name, logger)
 
         logger.log_step(
             StepType.SCENARIO_DETECTION,
@@ -442,6 +456,17 @@ Provide the execution plan:"""
                     results["summary"] = interpret_result.get("interpretation", "")
                     logger.log_interpretation(results["summary"])
 
+            summary_override = await self._maybe_generate_demo_summary(
+                scenario_id,
+                question,
+                kg_name,
+                results,
+                context,
+                logger
+            )
+            if summary_override:
+                results["summary"] = summary_override
+
             logger.log_success(f"Scenario '{scenario['name']}' completed successfully")
 
             return {
@@ -557,6 +582,230 @@ WHERE {{
 LIMIT 10"""
 
         return None
+
+    async def _maybe_generate_demo_summary(
+        self,
+        scenario_id: str,
+        question: str,
+        kg_name: str,
+        results: Dict[str, Any],
+        context: Dict[str, Any],
+        logger: AgentLogger
+    ) -> str:
+        """Ensure deterministic demos still pass through the interpret MCP with tailored guidance."""
+        if scenario_id != "scenario_1_neighbourhood":
+            return ""
+
+        rows = context.get("last_sparql_results", [])
+        if not rows:
+            return ""
+
+        csv_content = self._rows_to_csv(rows)
+        if not csv_content:
+            return ""
+
+        guidance = self._build_demo_guidance(
+            scenario_id,
+            question,
+            results,
+            rows,
+            context=context
+        )
+
+        payload: Dict[str, Any] = {
+            "question": question,
+            "kg_name": kg_name,
+            "sparql_results": csv_content,
+            "scenario_id": scenario_id
+        }
+        if guidance:
+            payload["guidance"] = guidance
+
+        interpret_result = await self.call_mcp_tool(
+            "/mcp/interpret",
+            payload,
+            logger
+        )
+
+        summary = interpret_result.get("interpretation", "")
+        if summary:
+            logger.log_interpretation(summary)
+        return summary
+
+    def _determine_focus_concept(
+        self,
+        results: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None
+    ) -> Tuple[Optional[str], str]:
+        """Infer the primary concept URI and a human-readable label for neighbourhood summaries."""
+        context = context or {}
+        concept_uris = context.get("concept_uris", [])
+        primary_uri = concept_uris[0] if concept_uris else None
+
+        focus_label = self._infer_label(primary_uri) if primary_uri else None
+        if not focus_label:
+            entities = context.get("entities", [])
+            focus_label = entities[0] if entities else context.get("question", "")
+        focus_label = (focus_label or "the concept").strip() or "the concept"
+
+        if not primary_uri:
+            focus_lower = focus_label.lower()
+            for node in results.get("nodes", []):
+                label = (node.get("label") or "").lower()
+                if label and (focus_lower in label or label in focus_lower):
+                    primary_uri = node.get("id")
+                    break
+
+        return primary_uri, focus_label
+
+    def _format_csv_value(self, value: Any) -> str:
+        if value is None:
+            return ""
+        text = str(value).replace("\n", " ").replace("\r", " ").strip()
+        if any(char in text for char in [",", '"']):
+            text = '"' + text.replace('"', '""') + '"'
+        return text
+
+    def _rows_to_csv(
+        self,
+        rows: List[Dict[str, Any]],
+        max_rows: int = 30
+    ) -> str:
+        if not rows:
+            return ""
+
+        headers: List[str] = []
+        for row in rows:
+            for key in row.keys():
+                if key not in headers:
+                    headers.append(key)
+
+        limited_rows = rows[:max_rows]
+        csv_lines = [",".join(headers)]
+        for row in limited_rows:
+            csv_lines.append(
+                ",".join(self._format_csv_value(row.get(header)) for header in headers)
+            )
+
+        return "\n".join(csv_lines)
+
+    def _build_demo_guidance(
+        self,
+        scenario_id: str,
+        question: str,
+        results: Dict[str, Any],
+        rows: List[Dict[str, Any]],
+        context: Optional[Dict[str, Any]] = None,
+        extra: Optional[Dict[str, Any]] = None
+    ) -> str:
+        extra = extra or {}
+        if scenario_id == "scenario_1_neighbourhood":
+            _, focus_label = self._determine_focus_concept(results, context)
+            relation_names = {
+                self._infer_label(link.get("relation")) for link in results.get("links", [])
+                if link.get("relation")
+            }
+            relation_names.discard("")
+            relation_names_sorted = sorted(relation_names)
+            relation_excerpt = ", ".join(relation_names_sorted[:5])
+            link_count = len(results.get("links", []))
+            node_count = len(results.get("nodes", []))
+
+            return (
+                f"Focus concept: {focus_label}. There are {link_count} edges across {node_count} nodes "
+                f"for the user question \"{question}\". If helpful, relation predicates include: {relation_excerpt or 'see CSV'}.\n"
+                "Produce one paragraph connecting the focus concept to its neighbourhood, followed by up to four bullet points "
+                "each describing a relation (format '- relation: source -> target'). Conclude with a sentence suggesting how this "
+                "neighbourhood answers the question."
+            )
+
+        if scenario_id == "scenario_2_multihop":
+            source_label = extra.get("source_label", "Source concept")
+            target_label = extra.get("target_label", "Target concept")
+            path_samples = extra.get("paths", []) or []
+            sample_text = "; ".join(path_samples[:2])
+            return (
+                f"Map out how {source_label} may progress toward {target_label} using the hop sequences returned in the CSV. "
+                f"There are {len(rows)} rows describing path segments. Explain the overall storyline in a short paragraph "
+                "highlighting intermediate risk factors. Then add a bullet list with up to three representative paths (start → … → end). "
+                f"If you need inspiration, example path sketches: {sample_text or 'see CSV rows'}."
+            )
+
+        if scenario_id == "scenario_3_federation":
+            alignment_count = extra.get("alignment_count", len(rows))
+            top_pairs = extra.get("top_pairs", []) or []
+            sample_text = "; ".join(top_pairs[:3])
+            return (
+                "Present the cross-ontology matches between the hearing and psychiatry graphs. "
+                f"Acknowledge that {alignment_count} alignment row(s) are available. "
+                "Write a concise explanatory paragraph describing how the ontologies overlap, then enumerate 2-3 bullet highlights "
+                "showing the matched concept pairs (format '- Hearing concept ↔ Psychiatry concept'). "
+                f"Use pairs such as {sample_text or 'those surfaced in the CSV'} to ground the explanation. "
+                "Close by explaining why these overlaps matter for the user's question."
+            )
+
+        if scenario_id == "scenario_4_validation":
+            subject_label = extra.get("subject_label", "Subject concept")
+            therapy_label = extra.get("therapy_label", "Target concept")
+            direct_edge = extra.get("has_direct_edge", False)
+            other_treatments = extra.get("other_treatments", [])
+            other_text = ", ".join(other_treatments[:3])
+            return (
+                f"Validate whether the knowledge graph contains a direct treatment edge linking {subject_label} to {therapy_label}. "
+                f"The CSV lists candidate relations; treat them as evidence. "
+                "Draft an answer that states clearly if the direct edge exists, cites the predicate used when present, "
+                "and mentions alternative treatments when relevant. "
+                f"Detected alternative treatments: {other_text or 'none surfaced beyond the CSV rows'}. "
+                "End with one sentence about how this validation could guide clinicians or analysts."
+            )
+
+        return ""
+
+    async def _interpret_demo_summary(
+        self,
+        scenario_id: str,
+        question: str,
+        kg_name: str,
+        rows: List[Dict[str, Any]],
+        results: Dict[str, Any],
+        logger: AgentLogger,
+        context: Optional[Dict[str, Any]] = None,
+        extra: Optional[Dict[str, Any]] = None,
+        fallback: str = ""
+    ) -> str:
+        csv_content = self._rows_to_csv(rows)
+        if not csv_content:
+            return fallback
+
+        guidance = self._build_demo_guidance(
+            scenario_id,
+            question,
+            results,
+            rows,
+            context=context,
+            extra=extra
+        )
+
+        payload: Dict[str, Any] = {
+            "question": question,
+            "kg_name": kg_name,
+            "sparql_results": csv_content,
+            "scenario_id": scenario_id
+        }
+        if guidance:
+            payload["guidance"] = guidance
+
+        try:
+            interpret_result = await self.call_mcp_tool(
+                "/mcp/interpret",
+                payload,
+                logger
+            )
+        except Exception:
+            return fallback
+
+        summary = interpret_result.get("interpretation", "") if interpret_result else ""
+        return summary or fallback
 
     def _merge_graph_results(
         self,
@@ -738,9 +987,17 @@ LIMIT 10"""
 
     def _is_demo_question(self, question: str, scenario_id: str) -> bool:
         triggers = self.demo_triggers.get(scenario_id)
+        question_norm = question.lower()
+
+        if scenario_id == "scenario_4_validation":
+            if "hearing loss" in question_norm and (
+                "cbt" in question_norm or "cognitive behavioral therapy" in question_norm
+            ):
+                return True
+            return False
+
         if not triggers:
             return False
-        question_norm = question.lower()
         return all(trigger in question_norm for trigger in triggers)
 
     async def _execute_multihop_demo(
@@ -965,10 +1222,42 @@ LIMIT 50"""
                 seen.add(norm)
                 unique_paths.append(desc)
 
-        summary = await self._summarize_demo_output(
+        source_label = self._infer_label(source_uri) if source_uri else "source concept"
+        target_label = self._infer_label(target_uri) if target_uri else "target concept"
+
+        fallback_summary: str
+        if unique_paths:
+            example_path = unique_paths[0]
+            additional = ""
+            if len(unique_paths) > 1:
+                additional = f" I also identified {len(unique_paths) - 1} additional path(s) with similar clinical reasoning."
+            fallback_summary = (
+                f"Graph analysis uncovered {len(unique_paths)} multi-hop path(s) connecting {source_label} and {target_label}. "
+                f"A representative path is: {example_path}.{additional}"
+            )
+        else:
+            fallback_summary = (
+                f"I explored the unified graph but did not find a multi-hop connection between {source_label} and {target_label}."
+            )
+
+        result_payload = {
+            "nodes": nodes,
+            "links": links
+        }
+
+        summary = await self._interpret_demo_summary(
+            "scenario_2_multihop",
             question,
-            unique_paths[:5],
-            "multi-hop connections between Chronic Stress and Hearing Loss"
+            kg_name,
+            rows,
+            result_payload,
+            logger,
+            extra={
+                "source_label": source_label,
+                "target_label": target_label,
+                "paths": unique_paths
+            },
+            fallback=fallback_summary
         )
 
         logger.log_interpretation(summary)
@@ -979,8 +1268,8 @@ LIMIT 50"""
             "scenario_name": "Multi-Hop Path Finding (Demo)",
             "question": question,
             "kg_name": kg_name,
-            "nodes": nodes,
-            "links": links,
+            "nodes": result_payload["nodes"],
+            "links": result_payload["links"],
             "summary": summary,
             "sparql_queries": [query],
             "trace": logger.get_trace(),
@@ -1146,10 +1435,50 @@ LIMIT 50"""
             })
 
         top_pairs = [f"{a['label1']} ↔ {a['label2']}" for a in alignments[:10]]
-        summary = await self._summarize_demo_output(
+
+        if alignments:
+            count = len(alignments)
+            headline = top_pairs[0]
+            fallback_summary = (
+                f"By following owl:sameAs alignment axioms across the hearing and psychiatry ontologies, "
+                f"I can relate {headline}. "
+            )
+            if count > 1:
+                examples = top_pairs[1:3]
+                if examples:
+                    fallback_summary += (
+                        f"I surfaced {count} cross-ontology pairing(s); additional examples include {', '.join(examples)}"
+                    )
+                    if count > 3:
+                        fallback_summary += f" and {count - 3} more alignment(s)"
+                    fallback_summary += ". "
+                else:
+                    fallback_summary += f"In total I surfaced {count} cross-ontology pairing(s). "
+            fallback_summary += (
+                "These ontological overlaps highlight shared risk factors and interventions represented in both repositories."
+            )
+        else:
+            fallback_summary = (
+                "I did not find ontology alignments linking the requested hearing and psychiatry concepts in the current graph snapshots."
+            )
+
+        result_payload = {
+            "nodes": nodes,
+            "links": links
+        }
+
+        summary = await self._interpret_demo_summary(
+            "scenario_3_federation",
             question,
-            top_pairs,
-            "cross-graph alignments between the hearing and psychiatry domains"
+            kg_name,
+            rows,
+            result_payload,
+            logger,
+            extra={
+                "alignment_count": len(alignments),
+                "top_pairs": top_pairs
+            },
+            fallback=fallback_summary
         )
 
         logger.log_interpretation(summary)
@@ -1170,35 +1499,135 @@ LIMIT 50"""
             "alignment_count": len(alignments)
         }
 
-    async def _summarize_demo_output(
+    async def _execute_validation_demo(
         self,
         question: str,
-        items: List[str],
-        focus: str
-    ) -> str:
-        if not items:
-            return f"No {focus} were found."
+        kg_name: str,
+        logger: AgentLogger
+    ) -> Dict[str, Any]:
+        logger.log_step(
+            StepType.SCENARIO_DETECTION,
+            "Executing deterministic validation demo pipeline",
+            details={"question": question}
+        )
 
-        prompt = f"""You are helping present a demo of a knowledge graph agent.
+        scenario = self.get_scenario_by_id("scenario_4_validation") or {"name": "Assertion Validation (Demo)"}
+        subject_uri = self.known_concept_map.get("hearing loss")
+        therapy_uri = self.known_concept_map.get("cognitive behavioral therapy")
 
-Question: "{question}"
-Focus: {focus}
+        if not subject_uri or not therapy_uri:
+            raise ValueError("Demo URIs for validation scenario are not configured.")
 
-Key findings:
-{chr(10).join(f"- {item}" for item in items)}
+        evidence_query = f"""PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?relation ?target ?targetLabel
+WHERE {{
+  <{subject_uri}> ?relation ?target .
+  FILTER(?relation IN (<http://example.org/hearing/hasTreatment>, <http://example.org/hearing/managedBy>))
+  OPTIONAL {{ ?target rdfs:label ?targetLabel }}
+}}
+LIMIT 25"""
 
-Write a concise, natural summary (2-3 sentences) highlighting how the connections answer the question.
-Keep the tone confident and demo-friendly. Mention how many items were found if possible."""
+        logger.log_step(
+            StepType.SPARQL_QUERY,
+            "Executing deterministic validation SPARQL query",
+            details={"query": evidence_query[:200]}
+        )
 
-        try:
-            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
-            text = (response.content or "").strip()
-            if text:
-                return text
-        except Exception:
-            pass
+        sparql_result = await self.call_mcp_tool(
+            "/mcp/sparql",
+            {"query": evidence_query, "kg_name": kg_name},
+            logger
+        )
 
-        return "Key findings:\n" + "\n".join(f"- {item}" for item in items)
+        rows = sparql_result.get("results", [])
+        logger.log_sparql_query(evidence_query, len(rows))
+
+        results: Dict[str, Any] = {
+            "nodes": [],
+            "links": [],
+            "sparql_queries": [evidence_query]
+        }
+
+        context = {
+            "concept_uris": [subject_uri, therapy_uri]
+        }
+        self._merge_graph_results(results, rows, context, "scenario_4_validation")
+
+        subject_label = self._infer_label(subject_uri)
+        therapy_label = self._infer_label(therapy_uri)
+
+        def humanize(value: str) -> str:
+            if not value:
+                return ""
+            cleaned = value.split("/")[-1].split("#")[-1]
+            cleaned = re.sub(r"(?<!^)(?=[A-Z])", " ", cleaned)
+            cleaned = cleaned.replace("_", " ")
+            return cleaned.strip().lower()
+
+        direct_edges = [
+            row for row in rows if row.get("target") == therapy_uri
+        ]
+        other_treatments: List[str] = []
+        for row in rows:
+            target = row.get("target")
+            if target and target != therapy_uri:
+                label = self._infer_label(target)
+                if label and label not in other_treatments:
+                    other_treatments.append(label)
+
+        if direct_edges:
+            relation_label = humanize(direct_edges[0].get("relation", ""))
+            fallback_summary = (
+                f"Graph validation confirms that {subject_label} is linked to {therapy_label} via the {relation_label} relation in the hearing ontology."
+            )
+            if other_treatments:
+                fallback_summary += (
+                    f" The graph also lists alternative interventions such as {', '.join(humanize(t).title() for t in other_treatments[:3])}."
+                )
+        else:
+            fallback_summary = (
+                f"Graph validation did not find a direct treatment edge between {subject_label} and {therapy_label}. "
+            )
+            if other_treatments:
+                fallback_summary += (
+                    f"The knowledge graph currently records other treatments such as {', '.join(humanize(t).title() for t in other_treatments[:3])}."
+                )
+            else:
+                fallback_summary += "No alternative treatments are recorded for this concept in the demo dataset."
+
+        summary = await self._interpret_demo_summary(
+            "scenario_4_validation",
+            question,
+            kg_name,
+            rows,
+            results,
+            logger,
+            context=context,
+            extra={
+                "subject_label": subject_label,
+                "therapy_label": therapy_label,
+                "has_direct_edge": bool(direct_edges),
+                "other_treatments": [humanize(t).title() for t in other_treatments]
+            },
+            fallback=fallback_summary
+        )
+
+        logger.log_interpretation(summary)
+        logger.log_success("Assertion validation demo scenario completed")
+
+        return {
+            "scenario": "scenario_4_validation",
+            "scenario_name": scenario.get("name", "Assertion Validation (Demo)"),
+            "question": question,
+            "kg_name": kg_name,
+            "nodes": results["nodes"],
+            "links": results["links"],
+            "summary": summary,
+            "sparql_queries": results["sparql_queries"],
+            "trace": logger.get_trace(),
+            "trace_formatted": logger.format_for_frontend(),
+            "evidence_rows": rows
+        }
 
     def _regenerate_sparql_query(
         self,
