@@ -57,6 +57,29 @@ const scenarioProgressMap: Record<string, string[]> = {
   ],
 };
 
+const scenarioShortcuts = [
+  {
+    id: 'scenario_1_neighbourhood',
+    label: 'Scenario 1',
+    question: 'What relations surround Tinnitus in the hearing graph?',
+  },
+  {
+    id: 'scenario_2_multihop',
+    label: 'Scenario 2',
+    question: 'How does Chronic Stress lead to Hearing Loss through intermediate conditions in the unified graph?',
+  },
+  {
+    id: 'scenario_3_federation',
+    label: 'Scenario 3',
+    question: 'Are there shared risk factors between Tinnitus in the hearing graph and Generalized Anxiety Disorder in the psychiatry graph?',
+  },
+  {
+    id: 'scenario_4_validation',
+    label: 'Scenario 4',
+    question: 'Does cognitive behavioral therapy help with Hearing Loss?',
+  },
+];
+
 export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatInterfaceProps) {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
   const [messages, setMessages] = useState<Message[]>([]);
@@ -226,10 +249,15 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
     }
   };
 
+  const handleShortcut = (question: string) => {
+    setInputValue(question);
+    onScenarioResult?.(null);
+  };
+
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg border border-[#E5E7EB]">
+    <div className="flex h-full flex-col">
       {/* Chat Header */}
-      <div className="px-6 py-4 border-b border-[#E5E7EB]">
+      <div className="px-6 pb-3">
         <h3 className="text-lg font-semibold text-[#1C1C1C]">
           Conversation
         </h3>
@@ -242,7 +270,7 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="mb-4">
@@ -278,20 +306,14 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg px-4 py-3 ${
-                    message.role === 'user'
-                      ? 'bg-[#E57373] text-white'
-                      : 'bg-[#F3F4F6] text-[#1C1C1C]'
+                  className={`max-w-[80%] text-sm leading-relaxed ${
+                    message.role === 'user' ? 'text-[#1C1C1C] text-right' : 'text-[#1C1C1C]'
                   }`}
                 >
-                  <div className="text-sm whitespace-pre-wrap break-words">
+                  <div className="whitespace-pre-wrap break-words">
                     {message.content}
                   </div>
-                  <div
-                    className={`text-xs mt-1 ${
-                      message.role === 'user' ? 'text-white/70' : 'text-[#6B7280]'
-                    }`}
-                  >
+                  <div className={`text-xs mt-1 text-[#9CA3AF] ${message.role === 'user' ? '' : ''}`}>
                     {message.timestamp.toLocaleTimeString([], {
                       hour: '2-digit',
                       minute: '2-digit',
@@ -302,7 +324,7 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
             ))}
             {isLoading && (
               <div className="flex justify-start">
-                <div className="bg-[#F3F4F6] rounded-lg px-4 py-3">
+                <div className="px-2 py-1">
                   <div className="flex space-x-2">
                     <div className="w-2 h-2 bg-[#6B7280] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                     <div className="w-2 h-2 bg-[#6B7280] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -317,7 +339,22 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
       </div>
 
       {/* Input Area */}
-      <div className="px-6 py-4 border-t border-[#E5E7EB]">
+      <div className="px-6 pt-4">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          {scenarioShortcuts.map(shortcut => (
+            <button
+              key={shortcut.id}
+              onClick={() => handleShortcut(shortcut.question)}
+              className="rounded-full border border-[#E5E7EB] px-4 py-2 text-xs font-medium text-[#6B7280] hover:border-[#E57373] hover:text-[#E57373] transition-colors"
+              type="button"
+            >
+              {shortcut.label}
+            </button>
+          ))}
+          <span className="text-xs text-[#9CA3AF]">
+            Préremplir une question démo, puis personnalisez avant envoi.
+          </span>
+        </div>
         <div className="flex gap-2">
           <textarea
             value={inputValue}

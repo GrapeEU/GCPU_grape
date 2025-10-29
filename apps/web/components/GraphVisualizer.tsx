@@ -88,15 +88,19 @@ const REPO_COLORS: Record<string, string> = {
 export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: GraphVisualizerProps) {
   const { theme } = useTheme();
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+  const defaultRepos = useMemo(
+    () => (kgFiles.includes('unified') ? ['unified'] : [...kgFiles]),
+    [kgFiles],
+  );
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [highlightNodes, setHighlightNodes] = useState(new Set<string>());
   const [highlightLinks, setHighlightLinks] = useState(new Set<GraphLink>());
-  const [graphMode, setGraphMode] = useState<GraphMode>('2d');
+  const [graphMode, setGraphMode] = useState<GraphMode>('3d');
   const [showLegend, setShowLegend] = useState(false);
-  const [selectedRepos, setSelectedRepos] = useState<string[]>(kgFiles);
+  const [selectedRepos, setSelectedRepos] = useState<string[]>(defaultRepos);
   const [nodeDetails, setNodeDetails] = useState<any | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
@@ -137,7 +141,8 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
       return;
     }
     if (!scenarioData) {
-      setSelectedRepos(prev => (arraysEqual(prev, kgFiles) ? prev : [...kgFiles]));
+      const target = kgFiles.includes('unified') ? ['unified'] : [...kgFiles];
+      setSelectedRepos(prev => (arraysEqual(prev, target) ? prev : target));
     }
   }, [kgFiles, scenarioData, arraysEqual]);
 
@@ -512,64 +517,63 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
   };
 
   return (
-    <div className={`flex flex-col h-full rounded-lg border ${isDark ? 'bg-[#111827] border-[#374151]' : 'bg-white border-[#E5E7EB]'}`}>
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className={`px-6 py-4 border-b ${isDark ? 'border-[#374151]' : 'border-[#E5E7EB]'}`}>
+      <div className="px-6 pb-3">
         <div className="flex items-center justify-between">
-          <div>
-            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>
-              Knowledge Graph Visualizer
-            </h3>
+          <div className="space-y-1">
+            <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>
+              {scenarioData ? scenarioData.title : hasData ? 'Interactive knowledge graph view' : 'Waiting for graph data'}
+            </p>
             {!scenarioData && kgFiles.length > 0 && (
-              <p className={`mt-2 text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>
-                Visualising data from: {kgFiles.map(repo => REPO_LABELS[repo] || repo).join(', ')}
+              <p className={`text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>
+                Sources: {selectedRepos.map(repo => REPO_LABELS[repo] || repo).join(', ')}
               </p>
             )}
           </div>
 
-          {hasData && (
-            <div className="flex items-center gap-2">
-              {/* 2D/3D Toggle */}
-              <div className={`flex items-center gap-1 p-1 rounded-lg ${isDark ? 'bg-[#1F2937]' : 'bg-[#F3F4F6]'}`}>
+          <div className="flex items-center gap-3">
+            {hasData && (
+              <>
+                <div className={`flex items-center gap-1 p-1 rounded-lg ${isDark ? 'bg-[#1F2937]' : 'bg-[#F3F4F6]'}`}>
+                  <button
+                    onClick={() => setGraphMode('2d')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+                      graphMode === '2d'
+                        ? 'bg-[#E57373] text-white'
+                        : isDark
+                        ? 'text-[#9CA3AF] hover:text-white'
+                        : 'text-[#6B7280] hover:text-[#1C1C1C]'
+                    }`}
+                  >
+                    2D
+                  </button>
+                  <button
+                    onClick={() => setGraphMode('3d')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+                      graphMode === '3d'
+                        ? 'bg-[#E57373] text-white'
+                        : isDark
+                        ? 'text-[#9CA3AF] hover:text-white'
+                        : 'text-[#6B7280] hover:text-[#1C1C1C]'
+                    }`}
+                  >
+                    3D
+                  </button>
+                </div>
                 <button
-                  onClick={() => setGraphMode('2d')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
-                    graphMode === '2d'
-                      ? 'bg-[#E57373] text-white'
-                      : isDark
-                      ? 'text-[#9CA3AF] hover:text-white'
-                      : 'text-[#6B7280] hover:text-[#1C1C1C]'
+                  onClick={() => setShowLegend(!showLegend)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    isDark
+                      ? 'bg-[#1F2937] text-[#9CA3AF] hover:text-white'
+                      : 'bg-[#F3F4F6] text-[#6B7280] hover:text-[#1C1C1C]'
                   }`}
                 >
-                  2D
+                  {showLegend ? 'Hide' : 'Show'} Legend
                 </button>
-                <button
-                  onClick={() => setGraphMode('3d')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
-                    graphMode === '3d'
-                      ? 'bg-[#E57373] text-white'
-                      : isDark
-                      ? 'text-[#9CA3AF] hover:text-white'
-                      : 'text-[#6B7280] hover:text-[#1C1C1C]'
-                  }`}
-                >
-                  3D
-                </button>
-              </div>
-
-              {/* Legend Toggle */}
-              <button
-                onClick={() => setShowLegend(!showLegend)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                  isDark
-                    ? 'bg-[#1F2937] text-[#9CA3AF] hover:text-white'
-                    : 'bg-[#F3F4F6] text-[#6B7280] hover:text-[#1C1C1C]'
-                }`}
-              >
-                {showLegend ? 'Hide' : 'Show'} Legend
-              </button>
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -766,7 +770,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
       </div>
 
       {/* Footer Info */}
-      <div className={`px-6 py-3 border-t ${isDark ? 'bg-[#111827] border-[#374151]' : 'bg-[#FDFDFD] border-[#E5E7EB]'}`}>
+      <div className="px-6 pt-3">
         <div className={`flex items-center justify-between text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1">
