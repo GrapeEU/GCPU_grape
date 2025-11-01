@@ -44,6 +44,7 @@ class QueryRequest(BaseModel):
     question: str = Field(..., description="User's question")
     kg_name: str = Field("grape_hearing", description="Knowledge graph to query (grape_demo, grape_hearing, grape_psychiatry, grape_unified)")
     scenario_id: Optional[str] = Field(None, description="Force a specific scenario (optional, auto-detected if not provided)")
+    demo_id: Optional[str] = Field(None, description="Optional demo identifier to trigger curated fallback")
 
 
 class QueryResponse(BaseModel):
@@ -110,7 +111,8 @@ async def execute_query(request: QueryRequest):
             scenario_id=scenario_id,
             question=request.question,
             kg_name=request.kg_name,
-            logger=logger
+            logger=logger,
+            demo_id=request.demo_id,
         )
 
         return QueryResponse(

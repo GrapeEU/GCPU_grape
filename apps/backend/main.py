@@ -54,10 +54,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"API Host: {settings.api_host}:{settings.api_port}")
 
-    # TODO: Initialize gen2kgbot adapter
-    # TODO: Initialize MCP pipelines
-    # TODO: Connect to GraphDB
-    # TODO: Verify LLM connectivity
+    # gen2kgbot adapters and MCP tooling are initialised lazily when the first
+    # request hits the relevant endpoint, which keeps startup lightweight.
 
     logger.info("Grape Backend API ready!")
 
@@ -65,7 +63,6 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Grape Backend API...")
-    # TODO: Close connections, cleanup resources
     logger.info("Shutdown complete")
 
 

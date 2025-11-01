@@ -2,11 +2,15 @@
 
 import { useState, useRef, useEffect } from 'react';
 
+import ReactMarkdown from 'react-markdown';
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  markdown?: boolean;
+  details?: string[];
 }
 
 export interface ScenarioResultData {
@@ -57,26 +61,49 @@ const scenarioProgressMap: Record<string, string[]> = {
   ],
 };
 
-const scenarioShortcuts = [
+type ShortcutConfig = {
+  id: string;
+  label: string;
+  question: string;
+  scenarioId: string | null;
+  kg?: string | null;
+};
+
+const scenarioShortcuts: ShortcutConfig[] = [
+  {
+    id: 'auto',
+    label: 'Auto',
+    question: '',
+    scenarioId: null,
+    kg: null,
+  },
   {
     id: 'scenario_1_neighbourhood',
-    label: 'Scenario 1',
-    question: 'What relations surround Tinnitus in the hearing graph?',
+    label: 'Scénario 1',
+    question: 'Pour ce patient suivi pour acouphènes (tinnitus) persistants, quels symptômes associés ou facteurs aggravants dois-je explorer en priorité ?',
+    scenarioId: 'scenario_1_neighbourhood',
+    kg: 'grape_hearing',
   },
   {
     id: 'scenario_2_multihop',
-    label: 'Scenario 2',
-    question: 'How does Chronic Stress lead to Hearing Loss through intermediate conditions in the unified graph?',
+    label: 'Scénario 2',
+    question: 'Chez cette patiente atteinte de stress chronique (Chronic Stress) qui commence à perdre l’audition (Hearing Loss), quels enchaînements cliniques expliquent la progression ?',
+    scenarioId: 'scenario_2_multihop',
+    kg: 'grape_unified',
   },
   {
     id: 'scenario_3_federation',
-    label: 'Scenario 3',
-    question: 'Are there shared risk factors between Tinnitus in the hearing graph and Generalized Anxiety Disorder in the psychiatry graph?',
+    label: 'Scénario 3',
+    question: 'Existe-t-il des correspondances documentées entre Tinnitus et Generalized Anxiety Disorder qui appuieraient une prise en charge conjointe ?',
+    scenarioId: 'scenario_3_federation',
+    kg: 'grape_unified',
   },
   {
     id: 'scenario_4_validation',
-    label: 'Scenario 4',
-    question: 'Does cognitive behavioral therapy help with Hearing Loss?',
+    label: 'Scénario 4',
+    question: 'Peux-tu confirmer si la thérapie cognitivo-comportementale (CBT) est bien enregistrée comme traitement de la perte auditive (Hearing Loss) et citer les alternatives présentes ?',
+    scenarioId: 'scenario_4_validation',
+    kg: 'grape_unified',
   },
 ];
 
@@ -85,18 +112,28 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [forcedScenarioId, setForcedScenarioId] = useState<string | null>(null);
+  const [forcedKg, setForcedKg] = useState<string | null>(null);
+  const [forcedQuestion, setForcedQuestion] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const makeMessage = (role: 'user' | 'assistant', content: string): Message => ({
-    id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    role,
-    content,
-    timestamp: new Date(),
-  });
+const makeMessage = (role: 'user' | 'assistant', content: string, extras: Partial<Message> = {}): Message => ({
+  id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  role,
+  content,
+  timestamp: new Date(),
+  ...extras,
+});
 
-  const appendAssistantMessage = (content: string) => {
-    setMessages(prev => [...prev, makeMessage('assistant', content)]);
-  };
+const appendAssistantMessage = (content: string, options?: { markdown?: boolean; details?: string[] }) => {
+  setMessages(prev => [
+    ...prev,
+    makeMessage('assistant', content, {
+      markdown: options?.markdown,
+      details: options?.details,
+    }),
+  ]);
+};
 
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -108,7 +145,12 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
     scrollToBottom();
   }, [messages]);
 
-  const executeScenario = async (question: string, kgName: string) => {
+  const executeScenario = async (
+    question: string,
+    kgName: string,
+    scenarioIdOverride: string | null = null,
+    demoId: string | null = null,
+  ) => {
     try {
       const response = await fetch(`${apiBaseUrl}/api/agent/query`, {
         method: 'POST',
@@ -118,6 +160,8 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
         body: JSON.stringify({
           question,
           kg_name: kgName,
+          ...(scenarioIdOverride ? { scenario_id: scenarioIdOverride } : {}),
+          ...(demoId ? { demo_id: demoId } : {}),
         }),
       });
 
@@ -134,7 +178,11 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
         'Step 3 – Consolidating the final answer…',
       ];
 
-      appendAssistantMessage(`Scenario detected (${payload.scenario_name}). Initialising analysis pipeline…`);
+      const introMessage = scenarioIdOverride
+        ? `Scenario ${payload.scenario_name} lancé manuellement. Initialisation du pipeline…`
+        : `Scenario detected (${payload.scenario_name}). Initialising analysis pipeline…`;
+
+      appendAssistantMessage(introMessage);
       for (const step of progressSteps) {
         await wait(300);
         appendAssistantMessage(step);
@@ -164,19 +212,24 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
           }))
         : [];
 
-      const summaryMessage = [
-        `Scenario ${payload.scenario_name} — detailed findings`,
+      const summaryLines = [
+        `## ${payload.scenario_name}`,
         '',
-        payload.answer,
-        '',
-        repoName ? `Repository examined: ${repoName}` : '',
-        `Results found: ${nodes.length} nodes analysed and ${links.length} relations evaluated.`,
-      ].filter(Boolean).join('\n');
+        payload.answer || '',
+      ];
+      const meta: string[] = [];
+      if (repoName) {
+        meta.push(`- **Référentiel analysé :** ${repoName}`);
+      }
+      meta.push(`- **Résultats :** ${nodes.length} noeuds analysés, ${links.length} relations évaluées.`);
+      summaryLines.push('', ...meta);
 
-      appendAssistantMessage(summaryMessage);
+      const summaryMessage = summaryLines.filter(Boolean).join('\n');
+
+      appendAssistantMessage(summaryMessage, { markdown: true });
 
       if (traceLines.length) {
-        appendAssistantMessage(`Execution log:\n${traceLines.map(line => `- ${line}`).join('\n')}`);
+        appendAssistantMessage('', { details: traceLines });
       }
 
       onScenarioResult?.({
@@ -200,38 +253,46 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
     const userMessage = makeMessage('user', inputValue);
     setMessages(prev => [...prev, userMessage]);
     const currentInput = inputValue;
+    const trimmedInput = currentInput.trim();
     setInputValue('');
     setIsLoading(true);
     onScenarioResult?.(null);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/agent/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: currentInput,
-          graph_id: selectedAgent,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get response from agent');
-      }
-
-      const data = await response.json();
-      const displayContent = (data.response || '').trim();
-
-      if (displayContent) {
-        appendAssistantMessage(displayContent);
-      }
-
-      if (data.is_query) {
-        const kgForQuery = data.suggested_kg || (selectedAgent ? agentKgMap[selectedAgent] : 'grape_unified');
-        await executeScenario(currentInput, kgForQuery);
+      if (forcedScenarioId) {
+        const kgForQuery = forcedKg || (selectedAgent ? agentKgMap[selectedAgent] : 'grape_unified');
+        const matchesDemo = Boolean(forcedQuestion && forcedQuestion.trim() === trimmedInput);
+        const demoId = matchesDemo ? forcedScenarioId : null;
+        await executeScenario(currentInput, kgForQuery, forcedScenarioId, demoId);
       } else {
-        onScenarioResult?.(null);
+        const response = await fetch(`${apiBaseUrl}/api/agent/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: currentInput,
+            graph_id: selectedAgent,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to get response from agent');
+        }
+
+        const data = await response.json();
+        const displayContent = (data.response || '').trim();
+
+        if (displayContent) {
+          appendAssistantMessage(displayContent);
+        }
+
+        if (data.is_query) {
+          const kgForQuery = data.suggested_kg || (selectedAgent ? agentKgMap[selectedAgent] : 'grape_unified');
+          await executeScenario(currentInput, kgForQuery);
+        } else {
+          onScenarioResult?.(null);
+        }
       }
     } catch (error) {
       console.error('Error calling agent:', error);
@@ -239,6 +300,9 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
       onScenarioResult?.(null);
     } finally {
       setIsLoading(false);
+      setForcedScenarioId(null);
+      setForcedKg(null);
+      setForcedQuestion(null);
     }
   };
 
@@ -249,8 +313,21 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
     }
   };
 
-  const handleShortcut = (question: string) => {
-    setInputValue(question);
+  const handleShortcut = (shortcut: ShortcutConfig) => {
+    if (shortcut.id === 'auto') {
+      setForcedScenarioId(null);
+      setForcedKg(null);
+      setForcedQuestion(null);
+      setInputValue('');
+      appendAssistantMessage('Mode auto activé : posez votre question, je sélectionnerai automatiquement le scénario adapté.');
+      onScenarioResult?.(null);
+      return;
+    }
+
+    setInputValue(shortcut.question);
+    setForcedScenarioId(shortcut.scenarioId);
+    setForcedKg(shortcut.kg ?? null);
+    setForcedQuestion(shortcut.question);
     onScenarioResult?.(null);
   };
 
@@ -310,9 +387,29 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
                     message.role === 'user' ? 'text-[#1C1C1C] text-right' : 'text-[#1C1C1C]'
                   }`}
                 >
-                  <div className="whitespace-pre-wrap break-words">
-                    {message.content}
-                  </div>
+                  {message.role === 'assistant' && message.markdown ? (
+                    <ReactMarkdown className="text-[#1C1C1C] text-sm leading-relaxed space-y-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_code]:font-mono [&_strong]:text-[#1C1C1C]">
+                      {message.content}
+                    </ReactMarkdown>
+                  ) : (
+                    message.content && (
+                      <div className="whitespace-pre-wrap break-words">
+                        {message.content}
+                      </div>
+                    )
+                  )}
+                  {message.details && message.details.length > 0 && (
+                    <details className="mt-2 rounded-md border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 text-xs text-[#4B5563]">
+                      <summary className="cursor-pointer text-[#E57373] font-medium">
+                        Détails de l’orchestration
+                      </summary>
+                      <ul className="mt-2 space-y-1 list-disc pl-4">
+                        {message.details.map((line, index) => (
+                          <li key={index}>{line}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
                   <div className={`text-xs mt-1 text-[#9CA3AF] ${message.role === 'user' ? '' : ''}`}>
                     {message.timestamp.toLocaleTimeString([], {
                       hour: '2-digit',
@@ -344,7 +441,7 @@ export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatI
           {scenarioShortcuts.map(shortcut => (
             <button
               key={shortcut.id}
-              onClick={() => handleShortcut(shortcut.question)}
+              onClick={() => handleShortcut(shortcut)}
               className="rounded-full border border-[#E5E7EB] px-4 py-2 text-xs font-medium text-[#6B7280] hover:border-[#E57373] hover:text-[#E57373] transition-colors"
               type="button"
             >

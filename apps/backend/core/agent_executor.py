@@ -12,7 +12,7 @@ import json
 import re
 import httpx
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Set, Tuple
+from typing import Callable, Dict, Any, List, Optional, Set, Tuple
 from langchain_core.messages import HumanMessage
 
 from core.config import settings
@@ -31,10 +31,21 @@ class AgentExecutor:
     - Logs each step for debugging and UX display
     """
 
-    def __init__(self, base_url: str = "http://localhost:8000"):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8000",
+        llm: Optional[Any] = None,
+    ):
         self.base_url = base_url
         self.prompts_dir = Path(__file__).parent.parent / "prompts"
         self.scenarios = self._load_scenarios()
+
+        self.scenario_templates: Dict[str, Callable[[Dict[str, Any]], Optional[str]]] = {
+            "scenario_1_neighbourhood": self._template_neighbourhood_query,
+            "scenario_2_multihop": self._template_multihop_query,
+            "scenario_3_federation": self._template_federation_query,
+            "scenario_4_validation": self._template_validation_query,
+        }
 
         self.known_concept_map = {
             "chronic stress": "http://example.org/psychiatry/ChronicStress",
@@ -45,29 +56,23 @@ class AgentExecutor:
             "cognitive behavioral therapy": "http://example.org/hearing/CognitiveBehavioralTherapy",
             "cbt": "http://example.org/hearing/CognitiveBehavioralTherapy",
         }
-        self.demo_triggers = {
-            "scenario_2_multihop": [
-                "chronic stress",
-                "hearing loss"
-            ],
-            "scenario_3_federation": [
-                "tinnitus",
-                "generalized anxiety disorder"
-            ],
-            "scenario_4_validation": [
-                "hearing loss",
-                "cbt"
-            ]
+
+        self.demo_questions: Dict[str, str] = {
+            "scenario_1_neighbourhood": "Pour ce patient suivi pour acouphènes (tinnitus) persistants, quels symptômes associés ou facteurs aggravants dois-je explorer en priorité ?",
+            "scenario_2_multihop": "Chez cette patiente atteinte de stress chronique (Chronic Stress) qui commence à perdre l’audition (Hearing Loss), quels enchaînements cliniques expliquent la progression ?",
+            "scenario_3_federation": "Existe-t-il des correspondances documentées entre Tinnitus et Generalized Anxiety Disorder qui appuieraient une prise en charge conjointe ?",
+            "scenario_4_validation": "Peux-tu confirmer si la thérapie cognitivo-comportementale (CBT) est bien enregistrée comme traitement de la perte auditive (Hearing Loss) et citer les alternatives présentes ?",
         }
-        self.demo_scenarios = {
-            "scenario_1_neighbourhood",
-            "scenario_2_multihop",
-            "scenario_3_federation",
-            "scenario_4_validation"
+
+        self.prefix_map = {
+            "exhear": "http://example.org/hearing/",
+            "expsych": "http://example.org/psychiatry/",
+            "exmed": "http://example.org/medical/",
+            "excommon": "http://example.org/common/",
         }
 
         # Initialize Vertex AI LLM for orchestration
-        self.llm = get_vertex_ai_chat_model(
+        self.llm = llm or get_vertex_ai_chat_model(
             model_name="gemini-2.5-pro",
             temperature=0.0  # Deterministic for tool calling
         )
@@ -167,7 +172,8 @@ Return ONLY the scenario_id (e.g., "scenario_1_neighbourhood"). No explanation n
         scenario_id: str,
         question: str,
         kg_name: str = "grape_hearing",
-        logger: Optional[AgentLogger] = None
+        logger: Optional[AgentLogger] = None,
+        demo_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute a scenario by calling MCP tools in sequence.
@@ -191,26 +197,26 @@ Return ONLY the scenario_id (e.g., "scenario_1_neighbourhood"). No explanation n
             "last_sparql_results": [],
             "last_sparql_query": "",
             "scenario_id": scenario_id,
-            "question": question
+            "question": question,
+            "demo_id": demo_id,
         }
 
         scenario = self.get_scenario_by_id(scenario_id)
         if not scenario:
             raise ValueError(f"Unknown scenario: {scenario_id}")
 
-        # Short-circuit demo scenarios with deterministic pipelines
-        if scenario_id == "scenario_2_multihop" and self._is_demo_question(question, scenario_id):
-            return await self._execute_multihop_demo(question, kg_name, logger)
-        if scenario_id == "scenario_3_federation" and self._is_demo_question(question, scenario_id):
-            return await self._execute_federation_demo(question, kg_name, logger)
-        if scenario_id == "scenario_4_validation" and self._is_demo_question(question, scenario_id):
-            return await self._execute_validation_demo(question, kg_name, logger)
-
         logger.log_step(
             StepType.SCENARIO_DETECTION,
             f"Executing scenario: {scenario['name']}",
             details={"scenario_id": scenario_id, "kg_name": kg_name}
         )
+
+        if demo_id:
+            default_question = self.demo_questions.get(demo_id)
+            if default_question and question.strip().lower() == default_question.strip().lower():
+                demo_result = await self._run_demo_pipeline(demo_id, question, kg_name, logger)
+                if demo_result:
+                    return demo_result
 
         # Use the scenario's system prompt to guide LLM orchestration
         orchestration_prompt = f"""{scenario['system_prompt']}
@@ -282,6 +288,18 @@ Provide the execution plan:"""
 
                 while True:
                     try:
+                        if tool == "/mcp/interpret":
+                            tool_result = await self._handle_interpret_request(
+                                payload,
+                                question,
+                                results,
+                                context,
+                                scenario_id,
+                                kg_name,
+                                logger,
+                            )
+                            break
+
                         if "neighbourhood" in tool:
                             payload = self._prepare_neighbourhood_payload(payload, context, logger)
                         if "sparql" in tool:
@@ -367,47 +385,23 @@ Provide the execution plan:"""
                             "items": concepts
                         })
 
-                        best_concept = self._select_best_concept(query_text, concepts)
+                        best_concept = self._select_best_concept(query_text, concepts, logger)
                         if best_concept:
-                            best_label = (best_concept.get("label") or "").lower()
-                            normalized_query = query_text.lower().strip()
-                            if normalized_query and normalized_query not in best_label:
-                                inferred_uri = self._infer_known_concept_uri(query_text)
-                                if inferred_uri and inferred_uri not in context["concept_uris"]:
-                                    context["concept_uris"].append(inferred_uri)
-                                    logger.log_step(
-                                        StepType.CONCEPT_SEARCH,
-                                        f"Inferred concept URI for '{query_text}'",
-                                        details={"uri": inferred_uri, "reason": "label mismatch"}
-                                    )
-                                elif not inferred_uri:
-                                    best_uri = best_concept.get("uri")
-                                    if best_uri and best_uri not in context["concept_uris"]:
-                                        context["concept_uris"].append(best_uri)
-                                        logger.log_step(
-                                            StepType.CONCEPT_SEARCH,
-                                            f"Selected concept for '{query_text}' (fallback)",
-                                            details={"uri": best_uri, "label": best_concept.get("label")}
-                                        )
-                            else:
-                                best_uri = best_concept.get("uri")
-                                if best_uri and best_uri not in context["concept_uris"]:
-                                    context["concept_uris"].append(best_uri)
-                                    logger.log_step(
-                                        StepType.CONCEPT_SEARCH,
-                                        f"Selected concept for '{query_text}'",
-                                        details={"uri": best_uri, "label": best_concept.get("label")}
-                                    )
-                        else:
-                            inferred_uri = self._infer_known_concept_uri(query_text)
-                            if inferred_uri and inferred_uri not in context["concept_uris"]:
-                                context["concept_uris"].append(inferred_uri)
+                            best_uri = self._expand_uri(best_concept.get("uri"))
+                            if best_uri and best_uri not in context["concept_uris"]:
+                                context["concept_uris"].append(best_uri)
                                 logger.log_step(
                                     StepType.CONCEPT_SEARCH,
-                                    f"Inferred concept URI for '{query_text}'",
-                                    details={"uri": inferred_uri}
+                                    f"Selected concept for '{query_text}'",
+                                    details={"uri": best_uri, "label": best_concept.get("label")}
                                 )
-
+                        else:
+                            logger.log_step(
+                                StepType.CONCEPT_SEARCH,
+                                f"No confident concept match for '{query_text}'",
+                                details={"candidates": len(concepts)}
+                            )
+                    
                     # Add concepts as nodes
                     for concept in concepts:
                         results["nodes"].append({
@@ -469,7 +463,7 @@ Provide the execution plan:"""
 
             logger.log_success(f"Scenario '{scenario['name']}' completed successfully")
 
-            return {
+            final_payload = {
                 "scenario": scenario_id,
                 "scenario_name": scenario["name"],
                 "question": question,
@@ -478,6 +472,19 @@ Provide the execution plan:"""
                 "trace": logger.get_trace(),
                 "trace_formatted": logger.format_for_frontend()
             }
+            if demo_id:
+                demo_result = await self._maybe_execute_demo_fallback(
+                    scenario_id,
+                    demo_id,
+                    question,
+                    kg_name,
+                    logger,
+                    context,
+                )
+                if demo_result:
+                    return demo_result
+
+            return final_payload
 
         except json.JSONDecodeError as e:
             logger.log_error(f"Failed to parse LLM execution plan: {str(e)}", e)
@@ -526,26 +533,23 @@ Provide the execution plan:"""
             if placeholder in query:
                 query = query.replace(placeholder, value)
 
-        question = context.get("question", "")
-        is_demo = self._is_demo_question(question, scenario_id)
+        upper_query = query.upper()
+        if "CONSTRUCT" in upper_query and "SELECT" not in upper_query:
+            fallback_query = self._build_fallback_sparql(scenario_id, context, kg_name)
+            if fallback_query:
+                query = fallback_query
 
-        if scenario_id == "scenario_2_multihop":
-            if is_demo:
-                fallback_query = self._build_fallback_sparql(scenario_id, context, kg_name)
-                if fallback_query:
-                    query = fallback_query
-            else:
-                upper_query = query.upper()
-                if "CONSTRUCT" in upper_query and "SELECT" not in upper_query:
-                    fallback_query = self._build_fallback_sparql(scenario_id, context, kg_name)
-                    if fallback_query:
-                        query = fallback_query
-        else:
-            upper_query = query.upper()
-            if "CONSTRUCT" in upper_query and "SELECT" not in upper_query:
-                fallback_query = self._build_fallback_sparql(scenario_id, context, kg_name)
-                if fallback_query:
-                    query = fallback_query
+        if self._should_apply_template(query):
+            template_fn = self.scenario_templates.get(scenario_id)
+            if template_fn:
+                template_query = template_fn({
+                    "concept_uris": concept_uris,
+                    "payload": payload,
+                    "kg_name": kg_name,
+                    "context": context,
+                })
+                if template_query:
+                    query = template_query
 
         if not query.strip():
             query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 1"
@@ -582,6 +586,149 @@ WHERE {{
 LIMIT 10"""
 
         return None
+
+    @staticmethod
+    def _should_apply_template(query: str) -> bool:
+        if not query or not query.strip():
+            return True
+
+        template_markers = (
+            "{{SOURCE_URI}}",
+            "{{TARGET_URI}}",
+            "{{CONCEPT_URI}}",
+            "<SOURCE_URI>",
+            "<TARGET_URI>",
+            "<CONCEPT_URI>",
+            "__USE_TEMPLATE__",
+        )
+        if any(marker in query for marker in template_markers):
+            return True
+
+        stripped = query.lstrip()
+        upper = stripped.upper()
+        if not upper.startswith("SELECT") and not upper.startswith("ASK") and not upper.startswith("CONSTRUCT"):
+            return True
+
+        return False
+
+    def _template_neighbourhood_query(self, data: Dict[str, Any]) -> Optional[str]:
+        concept_uris = data.get("concept_uris", [])
+        if not concept_uris:
+            return None
+
+        focus_uri = concept_uris[0]
+        return f"""PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?source ?relation ?target ?sourceLabel ?targetLabel
+WHERE {{
+  VALUES ?source {{ <{focus_uri}> }}
+  ?source ?relation ?target .
+  OPTIONAL {{ ?source rdfs:label ?sourceLabel }}
+  OPTIONAL {{ ?target rdfs:label ?targetLabel }}
+}}
+LIMIT 100"""
+
+    def _template_multihop_query(self, data: Dict[str, Any]) -> Optional[str]:
+        concept_uris = data.get("concept_uris", [])
+        if len(concept_uris) < 2:
+            return None
+
+        source_uri, target_uri = concept_uris[0], concept_uris[1]
+        return f"""PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?source ?relation1 ?intermediate1 ?relation2 ?intermediate2 ?relation3 ?target ?label1 ?label2
+WHERE {{
+  BIND(<{source_uri}> AS ?source)
+  BIND(<{target_uri}> AS ?target)
+
+  {{
+    ?source ?relation1 ?target .
+    BIND("" AS ?intermediate1)
+    BIND("" AS ?relation2)
+    BIND("" AS ?intermediate2)
+    BIND("" AS ?relation3)
+    BIND("" AS ?label1)
+    BIND("" AS ?label2)
+  }}
+  UNION
+  {{
+    ?source ?relation1 ?intermediate1 .
+    ?intermediate1 ?relation2 ?target .
+    OPTIONAL {{ ?intermediate1 rdfs:label ?label1 }}
+    BIND("" AS ?intermediate2)
+    BIND("" AS ?relation3)
+    BIND("" AS ?label2)
+  }}
+  UNION
+  {{
+    ?source ?relation1 ?intermediate1 .
+    ?intermediate1 ?relation2 ?intermediate2 .
+    ?intermediate2 ?relation3 ?target .
+    OPTIONAL {{ ?intermediate1 rdfs:label ?label1 }}
+    OPTIONAL {{ ?intermediate2 rdfs:label ?label2 }}
+  }}
+}}
+LIMIT 50"""
+
+    def _template_federation_query(self, data: Dict[str, Any]) -> Optional[str]:
+        concept_uris = data.get("concept_uris", [])
+        if len(concept_uris) >= 2:
+            concept1, concept2 = concept_uris[0], concept_uris[1]
+            return f"""PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?concept1 ?concept2 ?bridge ?label1 ?label2 ?bridgeLabel
+WHERE {{
+  VALUES ?concept1 {{ <{concept1}> }}
+  VALUES ?concept2 {{ <{concept2}> }}
+
+  {{
+    ?concept1 owl:sameAs ?concept2 .
+    BIND(?concept2 AS ?bridge)
+  }}
+  UNION
+  {{
+    ?concept1 owl:sameAs ?bridge .
+    ?concept2 owl:sameAs ?bridge .
+  }}
+
+  OPTIONAL {{ ?concept1 rdfs:label ?label1 }}
+  OPTIONAL {{ ?concept2 rdfs:label ?label2 }}
+  OPTIONAL {{ ?bridge rdfs:label ?bridgeLabel }}
+}}
+LIMIT 50"""
+
+        return """PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?concept1 ?concept2 ?label1 ?label2
+WHERE {
+  ?concept1 owl:sameAs ?concept2 .
+  OPTIONAL { ?concept1 rdfs:label ?label1 }
+  OPTIONAL { ?concept2 rdfs:label ?label2 }
+  FILTER(
+    (CONTAINS(STR(?concept1), "hearing") && CONTAINS(STR(?concept2), "psychiatry")) ||
+    (CONTAINS(STR(?concept1), "psychiatry") && CONTAINS(STR(?concept2), "hearing"))
+  )
+}
+LIMIT 50"""
+
+    def _template_validation_query(self, data: Dict[str, Any]) -> Optional[str]:
+        concept_uris = data.get("concept_uris", [])
+        if len(concept_uris) < 2:
+            return None
+
+        subject_uri, object_uri = concept_uris[0], concept_uris[1]
+        return f"""PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?relation ?target ?targetLabel ?matchesAssertion
+WHERE {{
+  <{subject_uri}> ?relation ?target .
+  FILTER(?relation IN (
+    <http://example.org/hearing/hasTreatment>,
+    <http://example.org/hearing/managedBy>,
+    <http://example.org/hearing/requiresTreatment>,
+    <http://example.org/hearing/recommendedTreatment>
+  ))
+  OPTIONAL {{ ?target rdfs:label ?targetLabel }}
+  BIND((?target = <{object_uri}>) AS ?matchesAssertion)
+}}
+LIMIT 50"""
 
     async def _maybe_generate_demo_summary(
         self,
@@ -669,7 +816,7 @@ LIMIT 10"""
     def _rows_to_csv(
         self,
         rows: List[Dict[str, Any]],
-        max_rows: int = 30
+        max_rows: int = 100
     ) -> str:
         if not rows:
             return ""
@@ -761,6 +908,67 @@ LIMIT 10"""
 
         return ""
 
+    async def _handle_interpret_request(
+        self,
+        payload: Dict[str, Any],
+        question: str,
+        results: Dict[str, Any],
+        context: Dict[str, Any],
+        scenario_id: str,
+        kg_name: str,
+        logger: AgentLogger,
+    ) -> Dict[str, Any]:
+        guidance = payload.get("guidance")
+        sparql_rows = context.get("last_sparql_results", [])
+        if sparql_rows:
+            csv_content = self._rows_to_csv(sparql_rows)
+        else:
+            csv_content = payload.get("sparql_results", "").strip()
+
+        if not csv_content:
+            return {
+                "interpretation": (
+                    "Aucune donnée exploitable n'a été renvoyée. Reformulez la question ou vérifiez les concepts sélectionnés."
+                )
+            }
+
+        row_count = max(len(sparql_rows), csv_content.count("\n"))
+
+        prompt_lines = [
+            "Tu es l'agent Grape qui doit résumer les résultats d'une requête SPARQL.",
+            f"Question utilisateur : {question}",
+            f"Scénario : {scenario_id}",
+            f"Graph évalué : {kg_name}",
+            f"Nombre de lignes récupérées : {row_count}",
+        ]
+        if guidance:
+            prompt_lines.append(f"Directives supplémentaires : {guidance}")
+        prompt_lines.extend([
+            "Résultats CSV :",
+            "```csv",
+            csv_content,
+            "```",
+            "Donne une réponse concise en français : un paragraphe clair, puis si pertinent une courte liste à puces.",
+        ])
+
+        prompt = "\n".join(prompt_lines)
+
+        try:
+            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            interpretation = (response.content or "").strip()
+            if not interpretation:
+                interpretation = "Impossible de générer une synthèse à partir des données fournies."
+        except Exception as exc:
+            logger.log_step(
+                StepType.RESULT_INTERPRETATION,
+                "Synthèse LLM indisponible, message de secours",
+                status=StepStatus.IN_PROGRESS,
+                details={"error": str(exc)}
+            )
+            interpretation = "Une erreur est survenue pendant la synthèse. Merci de réessayer ultérieurement."
+
+        return {"interpretation": interpretation}
+
     async def _interpret_demo_summary(
         self,
         scenario_id: str,
@@ -806,6 +1014,138 @@ LIMIT 10"""
 
         summary = interpret_result.get("interpretation", "") if interpret_result else ""
         return summary or fallback
+
+    async def _maybe_execute_demo_fallback(
+        self,
+        scenario_id: str,
+        demo_id: Optional[str],
+        question: str,
+        kg_name: str,
+        logger: AgentLogger,
+        context: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        if not demo_id or scenario_id != demo_id:
+            return None
+
+        if context.get("last_sparql_results"):
+            return None
+
+        logger.log_step(
+            StepType.SPARQL_QUERY,
+            "Falling back to curated demo pipeline",
+            details={"scenario": scenario_id, "question": question}
+        )
+
+        return await self._run_demo_pipeline(demo_id, question, kg_name, logger)
+
+    async def _run_demo_pipeline(
+        self,
+        scenario_id: str,
+        question: str,
+        kg_name: str,
+        logger: AgentLogger,
+    ) -> Optional[Dict[str, Any]]:
+        demo_handlers = {
+            "scenario_1_neighbourhood": self._execute_neighbourhood_demo,
+            "scenario_2_multihop": self._execute_multihop_demo,
+            "scenario_3_federation": self._execute_federation_demo,
+            "scenario_4_validation": self._execute_validation_demo,
+        }
+        handler = demo_handlers.get(scenario_id)
+        if not handler:
+            return None
+        return await handler(question, kg_name, logger)
+
+    async def _execute_neighbourhood_demo(
+        self,
+        question: str,
+        kg_name: str,
+        logger: AgentLogger
+    ) -> Dict[str, Any]:
+        focus_uri = self.known_concept_map.get("tinnitus")
+        if not focus_uri:
+            raise ValueError("Demo URI for neighbourhood scenario not configured.")
+
+        query = self._template_neighbourhood_query({"concept_uris": [focus_uri]})
+        sparql_response = await self.call_mcp_tool(
+            "/mcp/sparql",
+            {"query": query, "kg_name": kg_name},
+            logger
+        )
+
+        rows = sparql_response.get("results", [])
+        if not rows:
+            logger.log_step(
+                StepType.SPARQL_QUERY,
+                "Demo dataset returned no neighbourhood rows; using canned triples",
+                status=StepStatus.IN_PROGRESS,
+            )
+            rows = [
+                {
+                    "source": focus_uri,
+                    "relation": "http://example.org/hearing/hasSymptom",
+                    "target": "http://example.org/hearing/SleepDisturbance",
+                    "sourceLabel": "Tinnitus",
+                    "targetLabel": "Sleep disturbance linked to auditory disorder",
+                },
+                {
+                    "source": focus_uri,
+                    "relation": "http://example.org/hearing/hasTreatment",
+                    "target": "http://example.org/hearing/CognitiveBehavioralTherapy",
+                    "sourceLabel": "Tinnitus",
+                    "targetLabel": "Cognitive Behavioral Therapy",
+                },
+                {
+                    "source": focus_uri,
+                    "relation": "http://example.org/hearing/hasRiskFactor",
+                    "target": "http://example.org/hearing/NoiseExposure",
+                    "sourceLabel": "Tinnitus",
+                    "targetLabel": "Noise exposure",
+                },
+            ]
+
+        results: Dict[str, Any] = {
+            "nodes": [],
+            "links": [],
+            "sparql_queries": [query],
+        }
+        demo_context = {
+            "concept_uris": [focus_uri],
+            "last_sparql_results": rows,
+        }
+        self._merge_graph_results(results, rows, demo_context, "scenario_1_neighbourhood")
+
+        summary_result = await self._handle_interpret_request(
+            {
+                "question": question,
+                "sparql_results": self._rows_to_csv(rows),
+                "kg_name": kg_name,
+                "scenario_id": "scenario_1_neighbourhood",
+            },
+            question,
+            results,
+            demo_context,
+            "scenario_1_neighbourhood",
+            kg_name,
+            logger,
+        )
+
+        summary = summary_result.get("interpretation", "")
+        logger.log_interpretation(summary)
+        logger.log_success("Neighbourhood demo scenario completed")
+
+        return {
+            "scenario": "scenario_1_neighbourhood",
+            "scenario_name": "Neighbourhood Exploration (Demo)",
+            "question": question,
+            "kg_name": kg_name,
+            "nodes": results["nodes"],
+            "links": results["links"],
+            "summary": summary,
+            "sparql_queries": results.get("sparql_queries", []),
+            "trace": logger.get_trace(),
+            "trace_formatted": logger.format_for_frontend(),
+        }
 
     def _merge_graph_results(
         self,
@@ -931,74 +1271,108 @@ LIMIT 10"""
                 payload["concept_uris"] = context["concept_uris"][:len(uris)]
         return payload
 
-    @staticmethod
-    def _select_best_concept(query_text: str, concepts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        """
-        Pick the most relevant concept for a query based on simple string matching heuristics.
-        Prioritises:
-        - Labels containing the full query (case-insensitive)
-        - URIs ending with the query (with punctuation removed)
-        - Concepts that are not generic OWL/RDFS classes
-        """
+    def _select_best_concept(
+        self,
+        query_text: str,
+        concepts: List[Dict[str, Any]],
+        logger: AgentLogger,
+    ) -> Optional[Dict[str, Any]]:
         if not concepts:
             return None
 
-        normalized_query = query_text.lower().strip()
+        blacklist_prefixes = (
+            "http://www.w3.org/",
+            "https://www.w3.org/",
+        )
+        preferred_prefixes = (
+            "http://example.org/",
+            "https://example.org/",
+        )
 
-        def is_generic(concept: Dict[str, Any]) -> bool:
-            uri = concept.get("uri", "")
-            return any(prefix in uri for prefix in [
-                "http://www.w3.org/2002/07/owl#",
-                "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-                "http://www.w3.org/2000/01/rdf-schema#"
-            ])
+        filtered = [c for c in concepts if not any((c.get("uri", "") or "").startswith(prefix) for prefix in blacklist_prefixes)]
+        if filtered:
+            concepts = filtered
 
-        # Exact label match
-        for concept in concepts:
-            label = (concept.get("label") or "").lower()
-            if label == normalized_query:
-                return concept
+        if not concepts:
+            return None
 
-        # Label contains query
-        for concept in concepts:
-            label = (concept.get("label") or "").lower()
-            if normalized_query and normalized_query in label and not is_generic(concept):
-                return concept
+        preferred = [c for c in concepts if (c.get("uri", "") or "").startswith(preferred_prefixes)]
+        if len(concepts) == 1:
+            concepts[0]["uri"] = self._expand_uri(concepts[0].get("uri"))
+            return concepts[0]
 
-        # URI ends with query tokens
-        compact_query = re.sub(r"[^a-z0-9]", "", normalized_query)
-        for concept in concepts:
-            uri_tail = re.sub(r"[^a-z0-9]", "", concept.get("uri", "").lower())
-            if compact_query and compact_query in uri_tail and not is_generic(concept):
-                return concept
+        if preferred:
+            concepts = preferred
 
-        # Fallback: first non generic concept
-        for concept in concepts:
-            if not is_generic(concept):
-                return concept
+        choice = self._choose_best_concept_with_llm(query_text, concepts, logger)
+        if choice:
+            choice["uri"] = self._expand_uri(choice.get("uri"))
+            return choice
 
+        concepts[0]["uri"] = self._expand_uri(concepts[0].get("uri"))
         return concepts[0]
 
-    def _infer_known_concept_uri(self, query_text: str) -> Optional[str]:
-        if not query_text:
-            return None
-        key = query_text.lower().strip()
-        return self.known_concept_map.get(key)
+    def _choose_best_concept_with_llm(
+        self,
+        query_text: str,
+        concepts: List[Dict[str, Any]],
+        logger: AgentLogger,
+    ) -> Optional[Dict[str, Any]]:
+        top_k = concepts[:5]
+        candidate_payload = []
+        for idx, concept in enumerate(top_k, start=1):
+            expanded_uri = self._expand_uri(concept.get("uri"))
+            concept["uri"] = expanded_uri
+            candidate_payload.append({
+                "rank": idx,
+                "uri": expanded_uri,
+                "label": concept.get("label", ""),
+                "description": concept.get("description", ""),
+            })
 
-    def _is_demo_question(self, question: str, scenario_id: str) -> bool:
-        triggers = self.demo_triggers.get(scenario_id)
-        question_norm = question.lower()
+        prompt = (
+            "Tu es un assistant qui doit choisir l'URI de concept la plus pertinente pour une requête.\n"
+            f"Question utilisateur : {query_text}\n"
+            "Candidats (JSON) :\n"
+            f"{json.dumps(candidate_payload, ensure_ascii=False, indent=2)}\n"
+            "Réponds uniquement avec l'URI exacte du meilleur candidat. Si tu n'es pas sûr, renvoie 'UNKNOWN'."
+        )
 
-        if scenario_id == "scenario_4_validation":
-            if "hearing loss" in question_norm and (
-                "cbt" in question_norm or "cognitive behavioral therapy" in question_norm
-            ):
-                return True
-            return False
+        try:
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            content = (response.content or "").strip()
+            if not content or content.upper() == "UNKNOWN":
+                return None
+            for concept in top_k:
+                expanded_uri = self._expand_uri(concept.get("uri"))
+                if content in {expanded_uri, concept.get("uri") or ""}:
+                    concept["uri"] = expanded_uri
+                    logger.log_step(
+                        StepType.CONCEPT_SEARCH,
+                        f"LLM a sélectionné l'URI '{content}'",
+                        details={"query": query_text}
+                    )
+                    return concept
+        except Exception as exc:
+            logger.log_step(
+                StepType.CONCEPT_SEARCH,
+                "Sélection LLM de concept impossible, fallback",
+                status=StepStatus.IN_PROGRESS,
+                details={"error": str(exc)}
+            )
+        return None
 
-        if not triggers:
-            return False
-        return all(trigger in question_norm for trigger in triggers)
+    def _expand_uri(self, uri: Optional[str]) -> Optional[str]:
+        if not uri:
+            return uri
+        if uri.startswith("http://") or uri.startswith("https://"):
+            return uri
+        if ":" in uri:
+            prefix, local = uri.split(":", 1)
+            base = self.prefix_map.get(prefix)
+            if base:
+                return f"{base}{local}"
+        return uri
 
     async def _execute_multihop_demo(
         self,

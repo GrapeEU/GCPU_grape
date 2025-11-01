@@ -47,7 +47,7 @@ User Question (Natural Language)
   (text + nodes + links for viz)
 ```
 
-**Key Principle**: **No hardcoded scenario logic**. The LLM agent orchestrates MCP tools dynamically based on scenario prompts.
+**Key principle**: Gemini still chooses the scenario and MCP sequence, while deterministic SPARQL templates keep each call aligned with the intended ontology constraints.
 
 ---
 
@@ -77,7 +77,7 @@ Each tool is a tested gen2kgbot component exposed as an HTTP endpoint:
 | **`/mcp/interpret`** | Convert CSV results to natural language | `graph_nodes.interpret_results` |
 | **`/mcp/configure`** | Switch between knowledge graphs | `config_manager` |
 
-**Test Coverage**: 6/7 core component tests passing (see [tests/test_gen2kgbot_core.py](tests/test_gen2kgbot_core.py))
+**Test coverage**: Offline template assertions live in [`tests/test_agent_templates.py`](tests/test_agent_templates.py)
 
 ### 🌐 API Endpoints
 
@@ -297,8 +297,8 @@ apps/backend/
 │       ├── grape_psychiatry/faiss_embeddings/
 │       └── grape_unified/faiss_embeddings/
 │
-├── tests/                       # Test suite (6/7 passing)
-│   └── test_gen2kgbot_core.py   # Core component validation
+├── tests/                       # Offline template coverage
+│   └── test_agent_templates.py  # Scenario query + concept resolution assertions
 │
 ├── scripts/                     # Utility scripts
 │   └── generate_grape_embeddings.py  # One-time embedding generation
@@ -322,7 +322,7 @@ apps/backend/
 **✅ Added:**
 - `api/mcp.py` - 6 validated MCP tools
 - `prompts/` - Scenario prompt files for LLM
-- `tests/test_gen2kgbot_core.py` - Component validation
+- `tests/test_agent_templates.py` - Scenario template validation
 - `scripts/generate_grape_embeddings.py` - Embedding preprocessing
 - `SCENARIO_PROMPTS.md` - Scenario documentation
 
@@ -345,7 +345,7 @@ apps/backend/
 | **Entity Extraction** | Google Gemini | LLM-based NER (replaces Spacy) |
 | **Graph Database** | GraphDB | RDF triplestore with OWL reasoning |
 | **API Validation** | Pydantic 2.9+ | Request/response validation |
-| **Testing** | Pytest | 6/7 core tests passing |
+| **Testing** | Pytest | Template/unit coverage |
 
 ---
 
@@ -354,24 +354,14 @@ apps/backend/
 ### Running Tests
 
 ```bash
-# Run all core component tests
-uv run pytest tests/test_gen2kgbot_core.py -v
-
-# Run specific test
-uv run pytest tests/test_gen2kgbot_core.py::test_sparql_execution_simple -v
-
-# Run with detailed output
-uv run pytest tests/test_gen2kgbot_core.py -v -s
+# Run template-focused tests
+uv run pytest tests/test_agent_templates.py -v
 ```
 
-**Test Coverage:**
-- ✅ SPARQL execution (basic & complex queries)
-- ✅ Concept finding (embedding search)
-- ✅ Neighbourhood retrieval
-- ✅ Result interpretation (LLM)
-- ✅ End-to-end workflow
-- ⏭️ Embedding search (requires preprocessing)
-- ⚠️ NER extraction (1 edge case with small model)
+**Test coverage:**
+- ✅ Scenario SPARQL templates stay in sync with ontology constraints
+- ✅ First-hit concept resolution remains deterministic
+- 🔜 End-to-end smoke tests once automated GraphDB fixtures are available
 
 ### Adding a New MCP Tool
 
@@ -469,7 +459,7 @@ The system uses **universal SPARQL queries** that work with any RDF graph (only 
 ## Documentation
 
 - **[SCENARIO_PROMPTS.md](SCENARIO_PROMPTS.md)** - Detailed scenario prompts for LLM orchestration
-- **[tests/test_gen2kgbot_core.py](tests/test_gen2kgbot_core.py)** - Component test suite
+- **[tests/test_agent_templates.py](tests/test_agent_templates.py)** - Template and resolution tests
 - **[scripts/generate_grape_embeddings.py](scripts/generate_grape_embeddings.py)** - Embedding generation
 - **API Docs** - http://localhost:8000/docs (when server is running)
 - **gen2kgbot Docs** - [gen2kgbot/README.md](gen2kgbot/README.md)

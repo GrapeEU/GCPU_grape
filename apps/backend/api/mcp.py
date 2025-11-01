@@ -223,6 +223,11 @@ async def find_concepts(request: ConceptFinderRequest):
         # Format response
         concepts = []
         seen_uris = set()
+        blacklist_prefixes = (
+            "http://www.w3.org/",
+            "https://www.w3.org/",
+        )
+
         for raw_cls in similar_classes:
             cls_tuple = raw_cls
 
@@ -244,6 +249,9 @@ async def find_concepts(request: ConceptFinderRequest):
                 continue
 
             full_uri = prefixed_to_fulliri(str(cls_uri))
+
+            if any(full_uri.startswith(prefix) for prefix in blacklist_prefixes):
+                continue
 
             if full_uri in seen_uris:
                 continue
