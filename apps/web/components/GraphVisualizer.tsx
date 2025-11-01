@@ -100,6 +100,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
   const [highlightLinks, setHighlightLinks] = useState(new Set<GraphLink>());
   const [graphMode, setGraphMode] = useState<GraphMode>('3d');
   const [showLegend, setShowLegend] = useState(false);
+  const [showOntology, setShowOntology] = useState(false);
   const [selectedRepos, setSelectedRepos] = useState<string[]>(defaultRepos);
   const [nodeDetails, setNodeDetails] = useState<any | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -199,7 +200,11 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
       try {
         const responses = await Promise.all(
           selectedRepos.map(async repo => {
-            const response = await fetch(`${apiBaseUrl}/api/graph/${repo}/data`);
+            const url = new URL(`${apiBaseUrl}/api/graph/${repo}/data`);
+            if (showOntology) {
+              url.searchParams.set('include_ontology', 'true');
+            }
+            const response = await fetch(url.toString());
             if (!response.ok) {
               throw new Error(`Failed to load repository ${repo}`);
             }
@@ -294,7 +299,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
     };
 
     loadRepoGraphs();
-  }, [scenarioData, selectedRepos, apiBaseUrl]);
+  }, [scenarioData, selectedRepos, apiBaseUrl, showOntology]);
 
   useEffect(() => {
     if (!selectedNode) {
@@ -533,6 +538,24 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Always show ontology toggle if repos are selected, even without data */}
+            {(hasData || selectedRepos.length > 0) && (
+              <button
+                onClick={() => setShowOntology(!showOntology)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                  showOntology
+                    ? isDark
+                      ? 'bg-[#E57373] text-white'
+                      : 'bg-[#E57373] text-white'
+                    : isDark
+                    ? 'bg-[#1F2937] text-[#9CA3AF] hover:text-white'
+                    : 'bg-[#F3F4F6] text-[#6B7280] hover:text-[#1C1C1C]'
+                }`}
+                title="Toggle ontology relationships (rdf:type, rdfs:subClassOf, owl:sameAs)"
+              >
+                {showOntology ? '🔍 Ontology' : '🔍 Ontology'}
+              </button>
+            )}
             {hasData && (
               <>
                 <div className={`flex items-center gap-1 p-1 rounded-lg ${isDark ? 'bg-[#1F2937]' : 'bg-[#F3F4F6]'}`}>

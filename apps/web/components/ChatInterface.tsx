@@ -31,6 +31,7 @@ const agentKgMap: Record<string, string> = {
   'hearing-tinnitus': 'grape_hearing',
   'psychiatry-depression': 'grape_psychiatry',
   'integrative-health': 'grape_unified',
+  'philosophy-reasoning': 'grape_socrates',
 };
 
 const repoFromKg = (kgName: string | null | undefined) => {

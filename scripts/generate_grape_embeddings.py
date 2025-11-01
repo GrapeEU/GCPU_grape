@@ -112,6 +112,18 @@ GRAPE_KGS = [
             "schema": "http://schema.org/",
             "skos": "http://www.w3.org/2004/02/skos/core#"
         }
+    },
+    {
+        "short_name": "grape_socrates",
+        "full_name": "Grape Philosophy & Logic Knowledge Graph",
+        "endpoint": "http://localhost:7200/repositories/socrates",
+        "description": "Classical philosophy examples demonstrating logical inference and reasoning, including the famous Socrates syllogism",
+        "prefixes": {
+            "ex": "http://example.org/philosophy#",
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+            "owl": "http://www.w3.org/2002/07/owl#",
+            "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+        }
     }
 ]
 

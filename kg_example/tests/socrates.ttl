@@ -1,0 +1,35 @@
+# 1. Define your prefixes (like shortcuts)
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/philosophy#> .
+
+# 2. Define the Classes (your concepts)
+ex:Man rdf:type owl:Class .
+ex:Mortal rdf:type owl:Class .
+
+# 3. Define the Individual (your data point)
+ex:Socrates rdf:type owl:NamedIndividual .
+
+# -----------------------------------------------------------------
+# THE BASE DATA YOU WILL INPUT
+# -----------------------------------------------------------------
+
+# Fact 1: "All men are mortal"
+# This is an OWL/RDFS rule (axiom)
+ex:Man rdfs:subClassOf ex:Mortal .
+
+# Fact 2: "Socrates is a man"
+# This is a data fact (instance)
+ex:Socrates rdf:type ex:Man .
+
+# -----------------------------------------------------------------
+# THE INFERRED DATA (You DO NOT add this)
+# -----------------------------------------------------------------
+
+# The OWL2-RL reasoner will see Fact 1 and Fact 2
+# and will automatically generate this new triple:
+#
+# ex:Socrates rdf:type ex:Mortal .
+#
+# -----------------------------------------------------------------

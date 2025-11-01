@@ -48,7 +48,7 @@ class SPARQLQueryRequest(BaseModel):
 
 class ConceptFinderRequest(BaseModel):
     query_text: str = Field(..., description="Natural language query or concept name")
-    kg_name: str = Field(..., description="KG short name (grape_demo, grape_hearing, grape_psychiatry, grape_unified)")
+    kg_name: str = Field(..., description="KG short name (grape_demo, grape_hearing, grape_psychiatry, grape_unified, grape_socrates)")
     limit: int = Field(5, description="Maximum number of similar concepts")
     scenario_id: Optional[str] = Field(
         "scenario_3",
@@ -103,12 +103,13 @@ def configure_gen2kgbot_for_kg(kg_name: str, endpoint: Optional[str] = None):
             "grape_hearing": settings.graphdb_repo_hearing,
             "grape_psychiatry": settings.graphdb_repo_psychiatry,
             "grape_unified": settings.graphdb_repo_unified,
+            "grape_socrates": settings.graphdb_repo_socrates,
         }
 
         repo_endpoint = repo_map.get(kg_name)
         if not repo_endpoint:
             raise ValueError(
-                f"Unknown KG name: {kg_name}. Use grape_demo, grape_hearing, grape_psychiatry, or grape_unified"
+                f"Unknown KG name: {kg_name}. Use grape_demo, grape_hearing, grape_psychiatry, grape_unified, or grape_socrates"
             )
 
         config.config["kg_sparql_endpoint_url"] = repo_endpoint

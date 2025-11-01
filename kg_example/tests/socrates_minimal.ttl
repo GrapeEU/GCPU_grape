@@ -1,0 +1,54 @@
+# The Classic Socrates Syllogism - Pure Logic Demonstration
+# Demonstrates deductive reasoning with OWL2-RL inference
+
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/philosophy#> .
+
+# =============================================================================
+# CLASSES
+# =============================================================================
+
+ex:Man rdf:type owl:Class ;
+    rdfs:label "Man" ;
+    rdfs:comment "The class of all men" .
+
+ex:Mortal rdf:type owl:Class ;
+    rdfs:label "Mortal" ;
+    rdfs:comment "The class of all mortal beings" .
+
+# =============================================================================
+# INDIVIDUAL
+# =============================================================================
+
+ex:Socrates rdf:type owl:NamedIndividual ;
+    rdfs:label "Socrates" ;
+    rdfs:comment "The Greek philosopher" .
+
+# =============================================================================
+# THE SYLLOGISM
+# =============================================================================
+
+# PREMISE 1 (Major): "All men are mortal"
+ex:Man rdfs:subClassOf ex:Mortal .
+
+# PREMISE 2 (Minor): "Socrates is a man"
+ex:Socrates rdf:type ex:Man .
+
+# =============================================================================
+# INFERRED CONCLUSION
+# =============================================================================
+
+# The OWL2-RL reasoner automatically infers:
+#
+#   ex:Socrates rdf:type ex:Mortal
+#
+# THEREFORE: "Socrates is mortal"
+#
+# This demonstrates modus ponens in description logic:
+#   ∀x (Man(x) → Mortal(x))  [All men are mortal]
+#   Man(Socrates)             [Socrates is a man]
+#   ∴ Mortal(Socrates)        [Therefore, Socrates is mortal]
+#
+# =============================================================================

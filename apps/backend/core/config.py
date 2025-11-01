@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     graphdb_repo_hearing: str = "http://localhost:7200/repositories/hearing"
     graphdb_repo_psychiatry: str = "http://localhost:7200/repositories/psychiatry"
     graphdb_repo_unified: str = "http://localhost:7200/repositories/unified"
+    graphdb_repo_socrates: str = "http://localhost:7200/repositories/socrates"
 
     @property
     def get_repo_endpoint(self) -> dict:
@@ -65,7 +66,8 @@ class Settings(BaseSettings):
             "demo": self.graphdb_repo_demo,
             "hearing": self.graphdb_repo_hearing,
             "psychiatry": self.graphdb_repo_psychiatry,
-            "unified": self.graphdb_repo_unified
+            "unified": self.graphdb_repo_unified,
+            "socrates": self.graphdb_repo_socrates
         }
 
     # ========================================

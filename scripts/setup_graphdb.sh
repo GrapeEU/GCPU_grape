@@ -99,6 +99,7 @@ create_repository "demo" "Demo Medical KG"
 create_repository "hearing" "Hearing & Tinnitus KG"
 create_repository "psychiatry" "Psychiatry & Depression KG"
 create_repository "unified" "Unified Medical KG (All graphs + alignment)"
+create_repository "socrates" "Socrates Test KG"
 
 echo ""
 echo "📥 Loading knowledge graphs..."
@@ -124,6 +125,9 @@ load_turtle() {
   fi
 }
 
+# Load Socrates test KG (TTL) - Minimal syllogism for logic demonstration
+load_turtle "socrates" "./kg_example/tests/socrates_minimal.ttl" "http://example.org/philosophy/data"
+
 # Load hearing KG (TTL)
 load_turtle "hearing" "./kg_example/final_demo/hearing_graph.ttl" "http://example.org/hearing/data"
 
@@ -141,11 +145,12 @@ echo "✅ GraphDB setup complete!"
 echo ""
 echo "📊 Summary:"
 echo "   • GraphDB Workbench: ${GRAPHDB_URL}"
-echo "   • Repositories created: 4"
+echo "   • Repositories created: 5"
 echo "     - demo (http://localhost:7200/repositories/demo)"
 echo "     - hearing (http://localhost:7200/repositories/hearing)"
 echo "     - psychiatry (http://localhost:7200/repositories/psychiatry)"
 echo "     - unified (http://localhost:7200/repositories/unified)"
+echo "     - socrates (http://localhost:7200/repositories/socrates)"
 echo ""
 echo "🔍 Test SPARQL query:"
 echo "   curl -X POST -H 'Accept: application/sparql-results+json' \\"

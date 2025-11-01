@@ -8,7 +8,7 @@ import json
 from typing import Dict, Any
 
 GRAPHDB_URL = "http://localhost:7200"
-REPOSITORIES = ["demo", "hearing", "psychiatry", "unified"]
+REPOSITORIES = ["demo", "hearing", "psychiatry", "unified", "socrates"]
 
 
 def execute_sparql_query(repo: str, query: str) -> Dict[str, Any]:

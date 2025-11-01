@@ -14,7 +14,7 @@ REPO_ALIASES: Dict[str, List[str]] = {
 
 
 @router.get("/{repo}/data")
-def get_graph_data(repo: str, limit: int = 200):
+def get_graph_data(repo: str, limit: int = 200, include_ontology: bool = Query(False, description="Include RDF/RDFS/OWL relationships")):
     repo = repo.lower()
     repo_map = settings.get_repo_endpoint
     target_repos = REPO_ALIASES.get(repo, [repo])
@@ -31,7 +31,7 @@ def get_graph_data(repo: str, limit: int = 200):
 
     for target in target_repos:
         endpoint_url = repo_map[target]
-        rows = _fetch_repo_rows(endpoint_url, limit)
+        rows = _fetch_repo_rows(endpoint_url, limit, include_ontology)
         _merge_rows_into_graph(rows, target, combined_nodes, combined_links)
 
     nodes_response: List[Dict[str, Any]] = []
@@ -65,16 +65,30 @@ def get_graph_data(repo: str, limit: int = 200):
     }
 
 
-def _fetch_repo_rows(endpoint_url: str, limit: int) -> List[Dict[str, str]]:
+def _fetch_repo_rows(endpoint_url: str, limit: int, include_ontology: bool = False) -> List[Dict[str, str]]:
+    # Build filter conditions - exclude ontology namespaces unless explicitly requested
+    filters = ""
+    if not include_ontology:
+        # Default: exclude all RDF/RDFS/OWL predicates (domain relationships only)
+        filters = """
+  FILTER(!STRSTARTS(STR(?relation), "http://www.w3.org/1999/02/22-rdf-syntax-ns#"))
+  FILTER(!STRSTARTS(STR(?relation), "http://www.w3.org/2000/01/rdf-schema#"))
+  FILTER(!STRSTARTS(STR(?relation), "http://www.w3.org/2002/07/owl#"))"""
+    else:
+        # When ontology is enabled: show ONLY domain entities with ontology predicates
+        # This gives you the Socrates syllogism structure without RDF/OWL infrastructure
+        filters = """
+  FILTER(
+    STRSTARTS(STR(?source), "http://example.org/") &&
+    STRSTARTS(STR(?target), "http://example.org/")
+  )"""
+    
     query = f"""
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?source ?relation ?target ?sourceLabel ?targetLabel ?relationLabel
 WHERE {{
   ?source ?relation ?target .
-  FILTER(isURI(?target))
-  FILTER(!STRSTARTS(STR(?relation), "http://www.w3.org/1999/02/22-rdf-syntax-ns#"))
-  FILTER(!STRSTARTS(STR(?relation), "http://www.w3.org/2000/01/rdf-schema#"))
-  FILTER(!STRSTARTS(STR(?relation), "http://www.w3.org/2002/07/owl#"))
+  FILTER(isURI(?target)){filters}
   FILTER(?target != <http://www.w3.org/2002/07/owl#Thing>)
   OPTIONAL {{ ?source rdfs:label ?sourceLabel }}
   OPTIONAL {{ ?target rdfs:label ?targetLabel }}

@@ -42,7 +42,7 @@ def get_gemini_llm():
 
 class QueryRequest(BaseModel):
     question: str = Field(..., description="User's question")
-    kg_name: str = Field("grape_hearing", description="Knowledge graph to query (grape_demo, grape_hearing, grape_psychiatry, grape_unified)")
+    kg_name: str = Field("grape_hearing", description="Knowledge graph to query (grape_demo, grape_hearing, grape_psychiatry, grape_unified, grape_socrates)")
     scenario_id: Optional[str] = Field(None, description="Force a specific scenario (optional, auto-detected if not provided)")
     demo_id: Optional[str] = Field(None, description="Optional demo identifier to trigger curated fallback")
 
@@ -246,6 +246,7 @@ async def agent_status():
             "grape_demo",
             "grape_hearing",
             "grape_psychiatry",
-            "grape_unified"
+            "grape_unified",
+            "grape_socrates"
         ]
     }

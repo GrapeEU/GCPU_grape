@@ -23,5 +23,12 @@
       "unified"
     ],
     "description": "Connects hearing disorders with mental health through shared symptoms"
+  },
+  {
+    "id": "philosophy-reasoning",
+    "name": "Philosophy & Logic Specialist",
+    "prompt": "You are a philosophy and logic reasoning specialist. You demonstrate formal logical inference and deductive reasoning using classical examples like syllogisms. You can explain how OWL2-RL reasoners infer new knowledge from existing facts and class hierarchies.",
+    "kgFiles": ["socrates"],
+    "description": "Demonstrates logical reasoning and inference with classical philosophy examples"
   }
 ]
