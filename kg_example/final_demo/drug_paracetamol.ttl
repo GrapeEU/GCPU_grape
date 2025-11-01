@@ -1,0 +1,22 @@
+@prefix med: <http://example.org/medical/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+### Classes ###
+:Drug rdf:type owl:Class ;
+      rdfs:label "Drug" .
+
+:Disease rdf:type owl:Class ;
+         rdfs:label "Disease" .
+
+### Properties ###
+:isContraindicatedBy rdf:type owl:ObjectProperty ;
+                     rdfs:domain :Drug ;
+                     rdfs:range :Disease ;
+                     rdfs:label "is contraindicated by" .
+
+### Drug Instance ###
+med:Paracetamol rdf:type :Drug ;
+                rdfs:label "Paracetamol" ;
+                :isContraindicatedBy med:LiverDisease .

@@ -1,0 +1,116 @@
+@prefix : <http://example.org/patient/> .
+@prefix med: <http://example.org/medical/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+### Classes ###
+:Patient rdf:type owl:Class ;
+         rdfs:label "Patient" .
+
+:Sex rdf:type owl:Class ;
+     rdfs:label "Sex" .
+
+:BloodGroup rdf:type owl:Class ;
+            rdfs:label "Blood group" .
+
+:Disease rdf:type owl:Class ;
+         rdfs:label "Disease" .
+
+:Symptom rdf:type owl:Class ;
+         rdfs:label "Symptom" .
+
+:Drug rdf:type owl:Class ;
+      rdfs:label "Drug" .
+
+### Properties ###
+:hasDiagnosis rdf:type owl:ObjectProperty ;
+              rdfs:domain :Patient ;
+              rdfs:range :Disease ;
+              rdfs:label "has diagnosis" .
+
+:hasPastHistory rdf:type owl:ObjectProperty ;
+                rdfs:domain :Patient ;
+                rdfs:range :Disease ;
+                rdfs:label "has past history" .
+
+:hasSex rdf:type owl:ObjectProperty ;
+        rdfs:domain :Patient ;
+        rdfs:range :Sex ;
+        rdfs:label "has sex" .
+
+:hasBloodGroup rdf:type owl:ObjectProperty ;
+               rdfs:domain :Patient ;
+               rdfs:range :BloodGroup ;
+               rdfs:label "has blood group" .
+
+:hasSymptom rdf:type owl:ObjectProperty ;
+            rdfs:domain :Disease ;
+            rdfs:range :Symptom ;
+            rdfs:label "has symptom" .
+
+:isTreatedBy rdf:type owl:ObjectProperty ;
+             rdfs:domain :Symptom ;
+             rdfs:range :Drug ;
+             rdfs:label "is treated by" .
+
+:isContraindicatedBy rdf:type owl:ObjectProperty ;
+                     rdfs:domain :Drug ;
+                     rdfs:range :Disease ;
+                     rdfs:label "is contraindicated by" .
+
+### Instances ###
+
+:Male rdf:type :Sex ;
+      rdfs:label "Male" .
+
+:Female rdf:type :Sex ;
+        rdfs:label "Female" .
+
+:AB_Positive rdf:type :BloodGroup ;
+             rdfs:label "AB+" .
+
+:Patient_X rdf:type :Patient ;
+           rdfs:label "Lucas Martin" ;
+           :hasSex :Male ;
+           :hasBloodGroup :AB_Positive ;
+           :hasDiagnosis med:Flu ;
+           :hasPastHistory med:LiverDisease , med:DiabetesType2 , med:Hypertension .
+
+### Disease Instances ###
+med:Flu rdf:type :Disease ;
+        rdfs:label "Influenza (Flu)" ;
+        :hasSymptom med:Fever , med:Cough , med:Fatigue .
+
+med:LiverDisease rdf:type :Disease ;
+                 rdfs:label "Chronic Liver Disease" .
+
+med:DiabetesType2 rdf:type :Disease ;
+                  rdfs:label "Type 2 Diabetes" .
+
+med:Hypertension rdf:type :Disease ;
+                 rdfs:label "Hypertension" .
+
+### Symptom Instances ###
+med:Fever rdf:type :Symptom ;
+          rdfs:label "Fever" ;
+          :isTreatedBy med:Paracetamol .
+
+med:Cough rdf:type :Symptom ;
+          rdfs:label "Cough" ;
+          :isTreatedBy med:CoughSyrup .
+
+med:Fatigue rdf:type :Symptom ;
+            rdfs:label "Fatigue" ;
+            :isTreatedBy med:Rest .
+
+### Drug Instances ###
+med:Paracetamol rdf:type :Drug ;
+                rdfs:label "Paracetamol" ;
+                :isContraindicatedBy med:LiverDisease .
+
+med:CoughSyrup rdf:type :Drug ;
+               rdfs:label "Cough Syrup" .
+
+med:Rest rdf:type :Drug ;
+         rdfs:label "Rest" .

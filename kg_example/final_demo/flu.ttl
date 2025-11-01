@@ -1,0 +1,55 @@
+@prefix med: <http://example.org/medical/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+### Classes ###
+:Disease rdf:type owl:Class ;
+         rdfs:label "Disease" .
+
+:Symptom rdf:type owl:Class ;
+         rdfs:label "Symptom" .
+
+:Drug rdf:type owl:Class ;
+      rdfs:label "Drug" .
+
+### Properties ###
+:hasSymptom rdf:type owl:ObjectProperty ;
+            rdfs:domain :Disease ;
+            rdfs:range :Symptom ;
+            rdfs:label "has symptom" .
+
+:isTreatedBy rdf:type owl:ObjectProperty ;
+             rdfs:domain :Symptom ;
+             rdfs:range :Drug ;
+             rdfs:label "is treated by" .
+
+### Disease Instances ###
+med:Flu rdf:type :Disease ;
+        rdfs:label "Influenza (Flu)" ;
+        :hasSymptom med:Fever , med:Cough , med:Fatigue .
+
+### Symptom Instances ###
+med:Fever rdf:type :Symptom ;
+          rdfs:label "Fever" ;
+          :isTreatedBy med:Paracetamol .
+
+med:Cough rdf:type :Symptom ;
+          rdfs:label "Cough" ;
+          :isTreatedBy med:CoughSyrup .
+
+med:Fatigue rdf:type :Symptom ;
+            rdfs:label "Fatigue" ;
+            :isTreatedBy med:Rest .
+
+### Drug Instances ###
+med:Paracetamol rdf:type :Drug ;
+                rdfs:label "Paracetamol" ;
+                :isContraindicatedBy med:LiverDisease .
+
+med:CoughSyrup rdf:type :Drug ;
+               rdfs:label "Cough Syrup" .
+
+med:Rest rdf:type :Drug ;
+         rdfs:label "Rest" .
