@@ -1,0 +1,64 @@
+@prefix excond:  <http://example.org/condition/> .
+@prefix excommon: <http://example.org/common/> .
+@prefix exdrug:  <http://example.org/drug/> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+
+### Classes ###
+excond:Condition rdf:type owl:Class ;
+  rdfs:label "Medical Condition" .
+
+excond:Procedure rdf:type owl:Class ;
+  rdfs:label "Procedure" .
+
+excommon:Organ rdf:type owl:Class ;
+  rdfs:label "Organ" .
+
+excommon:Symptom rdf:type owl:Class ;
+  rdfs:label "Symptom" .
+
+### Properties ###
+excond:hasSymptom rdf:type owl:ObjectProperty ;
+  rdfs:domain excond:Condition ;
+  rdfs:range excommon:Symptom .
+
+excond:affectsOrgan rdf:type owl:ObjectProperty ;
+  rdfs:domain excond:Condition ;
+  rdfs:range excommon:Organ .
+
+excond:contraindicatedSubstance rdf:type owl:ObjectProperty ;
+  rdfs:domain excond:Condition ;
+  rdfs:range exdrug:Substance ;
+  owl:inverseOf exdrug:contraindicatedFor .
+
+excond:resultsInCondition rdf:type owl:ObjectProperty ;
+  rdfs:domain excond:Procedure ;
+  rdfs:range excond:Condition .
+
+excond:procedureDate rdf:type owl:DatatypeProperty ;
+  rdfs:domain excond:Procedure ;
+  rdfs:range xsd:date .
+
+### Instances ###
+excond:DiabetesMellitus rdf:type excond:Condition ;
+  rdfs:label "Diabetes Mellitus" .
+
+excond:PostNephrectomyStatus rdf:type excond:Condition ;
+  rdfs:label "Post-Nephrectomy Status" ;
+  excond:hasSymptom excommon:AbdominalPain ;
+  excond:affectsOrgan excommon:Kidney ;
+  excond:contraindicatedSubstance exdrug:E27B .
+
+excond:Nephrectomy2005 rdf:type excond:Procedure ;
+  rdfs:label "Nephrectomy (2005)" ;
+  excond:procedureDate "2005-06-01"^^xsd:date ;
+  excond:resultsInCondition excond:PostNephrectomyStatus .
+
+### Organ / Symptom instances ###
+excommon:Kidney rdf:type excommon:Organ ;
+  rdfs:label "Kidney" .
+
+excommon:AbdominalPain rdf:type excommon:Symptom ;
+  rdfs:label "Abdominal Pain" .

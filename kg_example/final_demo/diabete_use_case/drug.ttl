@@ -1,0 +1,33 @@
+@prefix exdrug:  <http://example.org/drug/> .
+@prefix excond:  <http://example.org/condition/> .
+@prefix excommon: <http://example.org/common/> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+
+### Classes ###
+exdrug:Substance rdf:type owl:Class ;
+  rdfs:label "Substance" .
+
+### Properties ###
+exdrug:contraindicatedFor rdf:type owl:ObjectProperty ;
+  rdfs:domain exdrug:Substance ;
+  rdfs:range excond:Condition .
+
+exdrug:causesSymptom rdf:type owl:ObjectProperty ;
+  rdfs:domain exdrug:Substance ;
+  rdfs:range excommon:Symptom .
+
+exdrug:hasComponent rdf:type owl:ObjectProperty ;
+  rdfs:domain exdrug:Substance ;
+  rdfs:range exdrug:Substance .
+
+### Instances ###
+exdrug:E27B rdf:type exdrug:Substance ;
+  rdfs:label "E27B" ;
+  exdrug:contraindicatedFor excond:PostNephrectomyStatus ;
+  exdrug:causesSymptom excommon:AbdominalPain .
+
+exdrug:E32A rdf:type exdrug:Substance ;
+  rdfs:label "E32A" .

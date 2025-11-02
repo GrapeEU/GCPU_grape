@@ -1,0 +1,56 @@
+@prefix exmed:   <http://example.org/medication/> .
+@prefix excond:  <http://example.org/condition/> .
+@prefix exdrug:  <http://example.org/drug/> .
+@prefix excommon: <http://example.org/common/> .
+@prefix exproc:  <http://example.org/procedure/> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+
+### Classes ###
+exmed:Medication rdf:type owl:Class ;
+  rdfs:label "Medication" .
+
+### Properties ###
+exmed:indicatedFor rdf:type owl:ObjectProperty ;
+  rdfs:domain exmed:Medication ;
+  rdfs:range excond:Condition .
+
+exmed:hasActiveSubstance rdf:type owl:ObjectProperty ;
+  rdfs:domain exmed:Medication ;
+  rdfs:range exdrug:Substance .
+
+exmed:contraindicatedFor rdf:type owl:ObjectProperty ;
+  rdfs:domain exmed:Medication ;
+  rdfs:range excond:Condition .
+
+exmed:mayCauseSymptom rdf:type owl:ObjectProperty ;
+  rdfs:domain exmed:Medication ;
+  rdfs:range excommon:Symptom .
+
+exmed:recommendedAlternativeTo rdf:type owl:ObjectProperty ;
+  rdfs:domain exmed:Medication ;
+  rdfs:range exmed:Medication .
+
+### Property-chain axioms ###
+exmed:contraindicatedFor owl:propertyChainAxiom ( exmed:hasActiveSubstance exdrug:contraindicatedFor ) .
+exmed:mayCauseSymptom owl:propertyChainAxiom ( exmed:hasActiveSubstance exdrug:causesSymptom ) .
+
+### Instances ###
+exmed:Metformin rdf:type exmed:Medication ;
+  rdfs:label "Metformin" ;
+  exmed:indicatedFor excond:DiabetesMellitus ;
+  exmed:hasActiveSubstance exdrug:E27B , exdrug:E32A .
+
+exmed:Glucorin rdf:type exmed:Medication ;
+  rdfs:label "Glucorin" ;
+  exmed:indicatedFor excond:DiabetesMellitus ;
+  exmed:recommendedAlternativeTo exmed:Metformin .
+
+### Assertions matérialisées ###
+exmed:Metformin exmed:contraindicatedFor excond:PostNephrectomyStatus .
+exmed:Metformin exmed:mayCauseSymptom excommon:AbdominalPain .
+
+### Procedures / Condition implication ###
+exproc:Nephrectomy2005 excommon:impliesCondition excond:PostNephrectomyStatus .
