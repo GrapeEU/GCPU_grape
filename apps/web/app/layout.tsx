@@ -53,6 +53,12 @@ export default function RootLayout({
                   How it works
                 </Link>
                 <Link
+                  href="/whats-next"
+                  className="transition-colors hover:text-[#E57373]"
+                >
+                  What's Next
+                </Link>
+                <Link
                   href="/thanks"
                   className="transition-colors hover:text-[#E57373]"
                 >

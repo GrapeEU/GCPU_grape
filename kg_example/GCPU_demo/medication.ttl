@@ -1,0 +1,166 @@
+@prefix exmed: <http://example.org/medication/> .
+@prefix excond: <http://example.org/condition/> .
+@prefix exdrug: <http://example.org/drug/> .
+@prefix excommon: <http://example.org/common/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# --- Classe Médicament ---
+exmed:Medication rdf:type owl:Class ;
+    rdfs:label "Medication" .
+
+# --- Propriétés ---
+exmed:indicatedFor rdf:type owl:ObjectProperty ;
+    rdfs:label "is indicated for" .
+
+exmed:hasActiveSubstance rdf:type owl:ObjectProperty ;
+    rdfs:label "has active substance" .
+
+exmed:contraindicatedFor rdf:type owl:ObjectProperty ;
+    rdfs:label "is contraindicated for" .
+
+exmed:hasSideEffect rdf:type owl:ObjectProperty ;
+    rdfs:label "has side effect" .
+
+exmed:hasInteractionWith rdf:type owl:ObjectProperty ;
+    rdfs:label "interacts with" .
+
+exmed:hasTherapeuticClass rdf:type owl:ObjectProperty ;
+    rdfs:label "belongs to therapeutic class" .
+
+exmed:hasDosageForm rdf:type owl:DatatypeProperty ;
+    rdfs:label "dosage form" .
+
+exmed:hasATCCode rdf:type owl:DatatypeProperty ;
+    rdfs:label "ATC code" .
+
+exmed:hasStandardDosage rdf:type owl:DatatypeProperty ;
+    rdfs:label "standard dosage" .
+
+# --- RÈGLE D'INFÉRENCE ---
+exmed:contraindicatedFor owl:propertyChainAxiom (
+    exmed:hasActiveSubstance
+    exdrug:contraindicatedFor
+) .
+
+exmed:hasSideEffect owl:propertyChainAxiom (
+    exmed:hasActiveSubstance
+    exdrug:causesSymptom
+) .
+
+# --- Médicaments Antidiabétiques ---
+exmed:Metamorphine rdf:type exmed:Medication ;
+    rdfs:label "Metamorphine" ;
+    exmed:indicatedFor excond:DiabetesMellitus ;
+    exmed:hasActiveSubstance exdrug:E27B ;
+    exmed:hasTherapeuticClass excommon:Biguanides ;
+    exmed:hasDosageForm "Tablet" ;
+    exmed:hasATCCode "A10BA02" ;
+    exmed:hasStandardDosage "500mg twice daily" ;
+    exmed:hasSideEffect excommon:Nausea ;
+    exmed:hasSideEffect excommon:Diarrhea ;
+    exmed:hasInteractionWith exmed:Lisinopril ;
+    exmed:hasInteractionWith exmed:Warfarin .
+
+exmed:Glucorin rdf:type exmed:Medication ;
+    rdfs:label "Glucorin" ;
+    exmed:indicatedFor excond:DiabetesMellitus ;
+    exmed:hasActiveSubstance exdrug:GlucorinSubstance ;
+    exmed:hasTherapeuticClass excommon:DPP4Inhibitors ;
+    exmed:hasDosageForm "Tablet" ;
+    exmed:hasATCCode "A10BH01" ;
+    exmed:hasStandardDosage "100mg once daily" ;
+    exmed:hasSideEffect excommon:Headache .
+
+exmed:Insulatard rdf:type exmed:Medication ;
+    rdfs:label "Insulatard" ;
+    exmed:indicatedFor excond:DiabetesMellitus ;
+    exmed:hasActiveSubstance exdrug:InsulinNPH ;
+    exmed:hasTherapeuticClass excommon:Insulins ;
+    exmed:hasDosageForm "Injectable" ;
+    exmed:hasATCCode "A10AC01" ;
+    exmed:hasStandardDosage "10 units subcutaneous" ;
+    exmed:hasSideEffect excommon:Hypoglycemia .
+
+# --- Médicaments Antihypertenseurs ---
+exmed:Lisinopril rdf:type exmed:Medication ;
+    rdfs:label "Lisinopril" ;
+    exmed:indicatedFor excond:Hypertension ;
+    exmed:indicatedFor excond:HeartFailure ;
+    exmed:hasActiveSubstance exdrug:LisinoprilSubstance ;
+    exmed:hasTherapeuticClass excommon:ACEInhibitors ;
+    exmed:hasDosageForm "Tablet" ;
+    exmed:hasATCCode "C09AA03" ;
+    exmed:hasStandardDosage "10mg once daily" ;
+    exmed:hasSideEffect excommon:DryCough ;
+    exmed:hasSideEffect excommon:Dizziness ;
+    exmed:contraindicatedFor excond:Pregnancy ;
+    exmed:hasInteractionWith exmed:Metamorphine .
+
+exmed:Amlodipine rdf:type exmed:Medication ;
+    rdfs:label "Amlodipine" ;
+    exmed:indicatedFor excond:Hypertension ;
+    exmed:indicatedFor excond:Angina ;
+    exmed:hasActiveSubstance exdrug:AmlodipineSubstance ;
+    exmed:hasTherapeuticClass excommon:CalciumChannelBlockers ;
+    exmed:hasDosageForm "Tablet" ;
+    exmed:hasATCCode "C08CA01" ;
+    exmed:hasStandardDosage "5mg once daily" ;
+    exmed:hasSideEffect excommon:AnkleSwelling ;
+    exmed:hasSideEffect excommon:Flushing .
+
+# --- Statines ---
+exmed:Atorvastatin rdf:type exmed:Medication ;
+    rdfs:label "Atorvastatin" ;
+    exmed:indicatedFor excond:Hyperlipidemia ;
+    exmed:indicatedFor excond:CardiovascularDisease ;
+    exmed:hasActiveSubstance exdrug:AtorvastatinSubstance ;
+    exmed:hasTherapeuticClass excommon:Statins ;
+    exmed:hasDosageForm "Tablet" ;
+    exmed:hasATCCode "C10AA05" ;
+    exmed:hasStandardDosage "20mg once daily" ;
+    exmed:hasSideEffect excommon:MusclePain ;
+    exmed:hasSideEffect excommon:LiverEnzymeElevation ;
+    exmed:hasInteractionWith exmed:Warfarin .
+
+exmed:Simvastatin rdf:type exmed:Medication ;
+    rdfs:label "Simvastatin" ;
+    exmed:indicatedFor excond:Hyperlipidemia ;
+    exmed:hasActiveSubstance exdrug:SimvastatinSubstance ;
+    exmed:hasTherapeuticClass excommon:Statins ;
+    exmed:hasDosageForm "Tablet" ;
+    exmed:hasATCCode "C10AA01" ;
+    exmed:hasStandardDosage "40mg once daily" ;
+    exmed:hasSideEffect excommon:MusclePain .
+
+# --- Anticoagulants ---
+exmed:Warfarin rdf:type exmed:Medication ;
+    rdfs:label "Warfarin" ;
+    exmed:indicatedFor excond:AtrialFibrillation ;
+    exmed:indicatedFor excond:DeepVeinThrombosis ;
+    exmed:hasActiveSubstance exdrug:WarfarinSubstance ;
+    exmed:hasTherapeuticClass excommon:Anticoagulants ;
+    exmed:hasDosageForm "Tablet" ;
+    exmed:hasATCCode "B01AA03" ;
+    exmed:hasStandardDosage "5mg once daily" ;
+    exmed:hasSideEffect excommon:BleedingRisk ;
+    exmed:hasInteractionWith exmed:Metamorphine ;
+    exmed:hasInteractionWith exmed:Atorvastatin .
+
+# --- Suppléments ---
+exmed:CalciumSupplements rdf:type exmed:Medication ;
+    rdfs:label "Calcium Supplements" ;
+    exmed:indicatedFor excond:Osteoporosis ;
+    exmed:hasActiveSubstance exdrug:CalciumCarbonate ;
+    exmed:hasDosageForm "Tablet" ;
+    exmed:hasStandardDosage "600mg twice daily" .
+
+exmed:IronSupplements rdf:type exmed:Medication ;
+    rdfs:label "Iron Supplements" ;
+    exmed:indicatedFor excond:Anemia ;
+    exmed:hasActiveSubstance exdrug:FerrousSulfate ;
+    exmed:hasDosageForm "Tablet" ;
+    exmed:hasStandardDosage "325mg once daily" ;
+    exmed:hasSideEffect excommon:Constipation .
+

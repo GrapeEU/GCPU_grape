@@ -4,7 +4,7 @@
 # Usage: ./install.sh
 #
 
-set -e
+set -euo pipefail
 
 echo "Grape Backend - Installation"
 echo "================================"
@@ -25,33 +25,47 @@ echo ""
 
 # Create virtual environment
 echo "[*] Creating Python 3.12 virtual environment..."
-uv venv --python 3.12
+uv venv --python 3.12 --seed pip
 
-# Detect OS for activation command
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
     ACTIVATE_CMD=".venv\\Scripts\\activate"
+    VENV_PYTHON=".venv\\Scripts\\python.exe"
 else
     ACTIVATE_CMD="source .venv/bin/activate"
+    VENV_PYTHON=".venv/bin/python"
+fi
+
+if [ ! -x "$VENV_PYTHON" ]; then
+    if [ -x ".venv/bin/python3" ]; then
+        VENV_PYTHON=".venv/bin/python3"
+    elif [ -x ".venv/bin/python3.12" ]; then
+        VENV_PYTHON=".venv/bin/python3.12"
+    elif [ -x ".venv/Scripts/python.exe" ]; then
+        VENV_PYTHON=".venv/Scripts/python.exe"
+    else
+        echo "[!] Executable Python introuvable dans la virtualenv (.venv)."
+        echo "    Vérifiez que 'uv venv' a bien créé l'environnement."
+        exit 1
+    fi
 fi
 
 echo "[+] Virtual environment created"
 echo ""
 
-# Activate venv and install dependencies
 echo "[*] Installing Python dependencies..."
-uv pip install -r requirements.txt
-
-# Install pip in venv (required for spacy download)
-echo "[*] Installing pip in venv..."
-uv pip install pip
+if [ -f requirements.txt ]; then
+    uv pip install -r requirements.txt
+else
+    uv sync
+fi
 
 echo "[+] Dependencies installed"
 echo ""
 
 # Install Spacy models
 echo "[*] Downloading Spacy models..."
-.venv/bin/python -m spacy download en_core_web_sm
-.venv/bin/python -m spacy download en_core_web_lg
+"$VENV_PYTHON" -m spacy download en_core_web_sm
+"$VENV_PYTHON" -m spacy download en_core_web_lg
 
 echo "[+] Spacy models installed"
 echo ""
@@ -80,14 +94,28 @@ else
 fi
 
 echo ""
-echo "[+] Installation complete!"
-echo ""
-echo "To start the server:"
-echo "   1. Activate venv: $ACTIVATE_CMD"
-echo "   2. Configure .env with your API keys"
-echo "   3. Run: python main.py (recommended)"
-echo "   4. Or: uvicorn main:app --reload"
-echo ""
-echo "Documentation: http://localhost:8000/docs"
-echo "Health check: http://localhost:8000/api/health"
-echo ""
+cat <<EOF
+
+[+] Installation complete!
+
+Next steps:
+  1. Edit apps/backend/.env and provide your Google Cloud project or service-account settings
+     (GOOGLE_APPLICATION_CREDENTIALS / GOOGLE_CLOUD_PROJECT, etc.).
+  2. If you run the frontend from another domain, update apps/web/.env to point NEXT_PUBLIC_API_URL to your backend URL.
+  3. Start GraphDB locally:
+       docker-compose -f ../../docker-compose.graphdb.yml up -d
+  4. Create/load the OWL2-RL repository named "unified" (done automatically if you run the existing compose file),
+     then load the demo data:
+       bash ../../scripts/refresh_unified_demo.sh
+  5. Ensure the Ollama embedding model is available:
+       ollama pull nomic-embed-text
+  6. Generate embeddings for the unified KG (once GraphDB is running):
+       python ../../scripts/generate_grape_embeddings.py unified
+  7. Activate the virtualenv and launch the API:
+       $ACTIVATE_CMD
+       python main.py
+
+Docs:        http://localhost:8000/docs
+Healthcheck: http://localhost:8000/api/health
+
+EOF

@@ -27,6 +27,12 @@ interface GraphLink {
   sourceRepos?: string[];
 }
 
+export interface GraphStep {
+  title: string;
+  nodes: GraphNode[];
+  links: GraphLink[];
+}
+
 export interface ScenarioGraphData {
   title: string;
   summary: string;
@@ -34,6 +40,7 @@ export interface ScenarioGraphData {
   links: GraphLink[];
   trace?: string[];
   repo?: string | null;
+  graph_steps?: GraphStep[];
 }
 
 interface GraphVisualizerProps {
@@ -105,6 +112,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const fgRef = useRef<any>();
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -151,15 +159,20 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
       return;
     }
 
-    const nodes = scenarioData.nodes.map(node => ({
+    // If graph_steps exists, use current step, otherwise use nodes/links
+    const sourceData = scenarioData.graph_steps && scenarioData.graph_steps.length > 0
+      ? scenarioData.graph_steps[currentStepIndex]
+      : scenarioData;
+
+    const nodes = sourceData.nodes.map(node => ({
       ...node,
       label: node.label || node.id.split(/[/#]/).pop() || node.id,
-      color: '#F97316',
+      color: scenarioData.repo ? (REPO_COLORS[scenarioData.repo] || '#F97316') : '#F97316',
       sourceRepos: scenarioData.repo ? [scenarioData.repo] : node.sourceRepos || [],
       sourceRepo: scenarioData.repo || node.sourceRepo,
     }));
 
-    const links = scenarioData.links.map(link => ({
+    const links = sourceData.links.map(link => ({
       source: link.source,
       target: link.target,
       label: link.label || link.relation || '',
@@ -180,7 +193,7 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
         fgRef.current.zoomToFit(400, 40);
       }
     });
-  }, [scenarioData]);
+  }, [scenarioData, currentStepIndex]);
 
   useEffect(() => {
     if (scenarioData) {
@@ -636,9 +649,21 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
               />
             )}
 
+            {/* Step Label - Top Left */}
+            {scenarioData?.graph_steps && scenarioData.graph_steps.length > 1 && (
+              <div className={`absolute top-4 left-4 rounded-lg shadow-lg px-4 py-2 ${isDark ? 'bg-[#1F2937] border border-[#374151]' : 'bg-white border border-[#E5E7EB]'}`}>
+                <div className={`text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'} mb-1`}>
+                  Step {currentStepIndex + 1} / {scenarioData.graph_steps.length}
+                </div>
+                <div className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>
+                  {scenarioData.graph_steps[currentStepIndex].title}
+                </div>
+              </div>
+            )}
+
             {/* Legend */}
             {showLegend && (
-              <div className={`absolute top-4 left-4 rounded-lg shadow-lg p-4 ${isDark ? 'bg-[#1F2937] border border-[#374151]' : 'bg-white border border-[#E5E7EB]'}`}>
+              <div className={`absolute ${scenarioData?.graph_steps && scenarioData.graph_steps.length > 1 ? 'top-24' : 'top-4'} left-4 rounded-lg shadow-lg p-4 ${isDark ? 'bg-[#1F2937] border border-[#374151]' : 'bg-white border border-[#E5E7EB]'}`}>
                 <h4 className={`text-sm font-semibold mb-3 ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>Node Types</h4>
                 <div className="space-y-2">
                   {LEGEND_ITEMS.map(item => (
@@ -768,6 +793,70 @@ export default function GraphVisualizer({ kgFiles = [], scenarioData = null }: G
           </div>
         )}
       </div>
+
+      {/* Graph Steps Slider */}
+      {scenarioData?.graph_steps && scenarioData.graph_steps.length > 1 && (
+        <div className="px-6 py-3 border-t border-opacity-10" style={{ borderColor: isDark ? '#374151' : '#E5E7EB' }}>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))}
+              disabled={currentStepIndex === 0}
+              className={`p-2 rounded-lg transition-colors ${
+                currentStepIndex === 0
+                  ? 'opacity-30 cursor-not-allowed'
+                  : isDark
+                  ? 'bg-[#1F2937] text-white hover:bg-[#374151]'
+                  : 'bg-[#F3F4F6] text-[#1C1C1C] hover:bg-[#E5E7EB]'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-[#1C1C1C]'}`}>
+                  {scenarioData.graph_steps[currentStepIndex].title}
+                </span>
+                <span className={`text-xs ${isDark ? 'text-[#9CA3AF]' : 'text-[#6B7280]'}`}>
+                  Step {currentStepIndex + 1} / {scenarioData.graph_steps.length}
+                </span>
+              </div>
+
+              <div className="relative">
+                <input
+                  type="range"
+                  min="0"
+                  max={scenarioData.graph_steps.length - 1}
+                  value={currentStepIndex}
+                  onChange={(e) => setCurrentStepIndex(parseInt(e.target.value))}
+                  className="w-full h-2 rounded-lg appearance-none cursor-pointer slider"
+                  style={{
+                    background: `linear-gradient(to right, #E57373 0%, #E57373 ${(currentStepIndex / (scenarioData.graph_steps.length - 1)) * 100}%, ${isDark ? '#374151' : '#E5E7EB'} ${(currentStepIndex / (scenarioData.graph_steps.length - 1)) * 100}%, ${isDark ? '#374151' : '#E5E7EB'} 100%)`
+                  }}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => setCurrentStepIndex(Math.min(scenarioData.graph_steps!.length - 1, currentStepIndex + 1))}
+              disabled={currentStepIndex === scenarioData.graph_steps.length - 1}
+              className={`p-2 rounded-lg transition-colors ${
+                currentStepIndex === scenarioData.graph_steps.length - 1
+                  ? 'opacity-30 cursor-not-allowed'
+                  : isDark
+                  ? 'bg-[#1F2937] text-white hover:bg-[#374151]'
+                  : 'bg-[#F3F4F6] text-[#1C1C1C] hover:bg-[#E5E7EB]'
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Footer Info */}
       <div className="px-6 pt-3">

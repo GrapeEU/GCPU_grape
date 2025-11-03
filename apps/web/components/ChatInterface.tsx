@@ -20,6 +20,11 @@ export interface ScenarioResultData {
   links: Array<{ source: string; target: string; label?: string }>;
   trace: string[];
   repo: string | null;
+  graph_steps?: Array<{
+    title: string;
+    nodes: Array<{ id: string; label?: string; type?: string }>;
+    links: Array<{ source: string; target: string; label?: string }>;
+  }>;
 }
 
 interface ChatInterfaceProps {
@@ -28,9 +33,7 @@ interface ChatInterfaceProps {
 }
 
 const agentKgMap: Record<string, string> = {
-  'hearing-tinnitus': 'grape_hearing',
-  'psychiatry-depression': 'grape_psychiatry',
-  'integrative-health': 'grape_unified',
+  'medical-expert': 'grape_unified',
 };
 
 const repoFromKg = (kgName: string | null | undefined) => {
@@ -38,84 +41,112 @@ const repoFromKg = (kgName: string | null | undefined) => {
   return kgName.startsWith('grape_') ? kgName.replace('grape_', '') : kgName;
 };
 
+type Mode = 'ask' | 'agent-auto' | 'demo-s1' | 'demo-s2' | 'demo-s3' | 'deep';
+
+const MODE_CONFIG: Record<Mode, {
+  label: string;
+  helper: string;
+  prefill?: string;
+  demoId?: string;
+  kg?: string;
+}> = {
+  ask: {
+    label: 'Ask (LLM only)',
+    helper: 'Conversation libre avec le LLM, sans requête SPARQL.',
+    prefill: '',
+  },
+  'agent-auto': {
+    label: 'Agent – Auto Scenario',
+    helper: 'Analyse automatique : détection du meilleur scénario KG.',
+    prefill: '',
+  },
+  'demo-s1': {
+    label: 'Agent › Patient Explorer',
+    helper: 'Pipeline S1 : exploration du dossier patient.',
+    prefill: "Could you review PatientJohn's chart and summarise his relevant history, symptoms, and medications?",
+    demoId: 'S1_PATIENT',
+    kg: 'grape_unified',
+  },
+  'demo-s2': {
+    label: 'Agent › Path Finder',
+    helper: 'Pipeline S2 : recherche de liens multi-sauts.',
+    prefill: "Please investigate any hidden pathways linking substance E27B to the abdominal pain experienced by PatientJohn.",
+    demoId: 'S2_PATHFINDING',
+    kg: 'grape_unified',
+  },
+  'demo-s3': {
+    label: 'Agent › Risk Verificator',
+    helper: 'Pipeline S3 : validation ontologique.',
+    prefill: "Given PatientJohn's nephrectomy in 2005, can you confirm whether Metamorphine is contraindicated and recommend a safer option?",
+    demoId: 'S3_VALIDATION',
+    kg: 'grape_unified',
+  },
+  deep: {
+    label: 'Deep Reasoning',
+    helper: 'Pipeline complète (S1→S3) avec narration détaillée.',
+    prefill: "I have a diabetic patient, PatientJohn, currently on Metamorphine who now reports abdominal pain. Please investigate the risk and suggest a safer alternative.",
+    demoId: 'DEEP_REASONING',
+    kg: 'grape_unified',
+  },
+};
+
 const scenarioProgressMap: Record<string, string[]> = {
   scenario_1_neighbourhood: [
-    'Step 1 – Identifying semantic entry points in the question…',
-    'Step 2 – Generating a targeted SPARQL query…',
-    'Step 3 – Interpreting graph results and compiling the answer…',
+    'Étape 1 – Détection des concepts clés…',
+    'Étape 2 – Construction de la requête SPARQL…',
+    'Étape 3 – Synthèse des voisins médicaux…',
   ],
   scenario_2_multihop: [
-    'Step 1 – Anchoring the source and target concepts across domains…',
-    'Step 2 – Exploring multi-hop relational paths in the unified graph…',
-    'Step 3 – Analysing discovered paths and assembling the explanation…',
-  ],
-  scenario_3_federation: [
-    'Step 1 – Scanning hearing and psychiatry graphs for alignable concepts…',
-    'Step 2 – Retrieving cross-graph correspondences via owl:sameAs links…',
-    'Step 3 – Consolidating aligned concepts into an interpretable summary…',
+    'Étape 1 – Ancrage source / cible…',
+    'Étape 2 – Exploration des chemins multi-sauts…',
+    'Étape 3 – Analyse des intermédiaires critiques…',
   ],
   scenario_4_validation: [
-    'Step 1 – Formalising the assertion to validate…',
-    'Step 2 – Checking available graph evidence for the claim…',
-    'Step 3 – Summarising the conclusion and supporting triples…',
+    'Étape 1 – Vérification des contre-indications…',
+    'Étape 2 – Analyse des triples probants…',
+    'Étape 3 – Synthèse avec recommandation clinique…',
+  ],
+  DEMO_S1_PATIENT: [
+    'Étape 1 – Ouverture du dossier PatientJohn…',
+    'Étape 2 – Extraction des faits cliniques…',
+    'Étape 3 – Préparation de la restitution…',
+  ],
+  DEMO_S2_PATHFINDING: [
+    'Étape 1 – Analyse de la substance active E27B…',
+    'Étape 2 – Recherche de liens vers la douleur abdominale…',
+    'Étape 3 – Sélection des trajectoires significatives…',
+  ],
+  DEMO_S3_VALIDATION: [
+    'Étape 1 – Vérification des contre-indications post-néphrectomie…',
+    'Étape 2 – Évaluation des alternatives disponibles…',
+    'Étape 3 – Préparation du verdict clinique…',
+  ],
+  DEMO_AUTONOMOUS: [
+    'Phase 1 – Patient & traitement…',
+    'Phase 2 – Substance & effets secondaires…',
+    'Phase 3 – Incompatibilité & alternative…',
+  ],
+  DEMO_DEEP_REASONING: [
+    'Phase 1 – Collecte exhaustive des indices…',
+    'Phase 2 – Chaînage multi-sauts et effets rénaux…',
+    'Phase 3 – Verdict ontologique et plan d’action…',
   ],
 };
-
-type ShortcutConfig = {
-  id: string;
-  label: string;
-  question: string;
-  scenarioId: string | null;
-  kg?: string | null;
-};
-
-const scenarioShortcuts: ShortcutConfig[] = [
-  {
-    id: 'auto',
-    label: 'Auto',
-    question: '',
-    scenarioId: null,
-    kg: null,
-  },
-  {
-    id: 'scenario_1_neighbourhood',
-    label: 'Scénario 1',
-    question: 'Pour ce patient suivi pour acouphènes (tinnitus) persistants, quels symptômes associés ou facteurs aggravants dois-je explorer en priorité ?',
-    scenarioId: 'scenario_1_neighbourhood',
-    kg: 'grape_hearing',
-  },
-  {
-    id: 'scenario_2_multihop',
-    label: 'Scénario 2',
-    question: 'Chez cette patiente atteinte de stress chronique (Chronic Stress) qui commence à perdre l’audition (Hearing Loss), quels enchaînements cliniques expliquent la progression ?',
-    scenarioId: 'scenario_2_multihop',
-    kg: 'grape_unified',
-  },
-  {
-    id: 'scenario_3_federation',
-    label: 'Scénario 3',
-    question: 'Existe-t-il des correspondances documentées entre Tinnitus et Generalized Anxiety Disorder qui appuieraient une prise en charge conjointe ?',
-    scenarioId: 'scenario_3_federation',
-    kg: 'grape_unified',
-  },
-  {
-    id: 'scenario_4_validation',
-    label: 'Scénario 4',
-    question: 'Peux-tu confirmer si la thérapie cognitivo-comportementale (CBT) est bien enregistrée comme traitement de la perte auditive (Hearing Loss) et citer les alternatives présentes ?',
-    scenarioId: 'scenario_4_validation',
-    kg: 'grape_unified',
-  },
-];
 
 export default function ChatInterface({ selectedAgent, onScenarioResult }: ChatInterfaceProps) {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [forcedScenarioId, setForcedScenarioId] = useState<string | null>(null);
-  const [forcedKg, setForcedKg] = useState<string | null>(null);
-  const [forcedQuestion, setForcedQuestion] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>('agent-auto');
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const modeMenuRef = useRef<HTMLDivElement>(null);
+  const currentModeConfig = MODE_CONFIG[mode];
+  const requiresAgent = mode === 'ask' || mode === 'agent-auto';
+  const textareaPlaceholder = requiresAgent && !selectedAgent
+    ? 'Sélectionnez un agent puis saisissez votre message...'
+    : 'Saisissez votre message ou ajustez le prompt pré-rempli...';
 
 const makeMessage = (role: 'user' | 'assistant', content: string, extras: Partial<Message> = {}): Message => ({
   id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -137,6 +168,18 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
 
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+  const applyMode = (newMode: Mode) => {
+    setMode(newMode);
+    setModeMenuOpen(false);
+    const config = MODE_CONFIG[newMode];
+    if (typeof config.prefill === 'string') {
+      setInputValue(config.prefill);
+    } else if (newMode === 'ask' || newMode === 'agent-auto') {
+      setInputValue('');
+    }
+    onScenarioResult?.(null);
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -144,6 +187,37 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (modeMenuRef.current && !modeMenuRef.current.contains(event.target as Node)) {
+        setModeMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const source = new EventSource(`${apiBaseUrl}/api/agent/status-stream`);
+
+    source.onmessage = (event) => {
+      const text = (event.data || '').trim();
+      if (!text) return;
+      setMessages(prev => [
+        ...prev,
+        makeMessage('assistant', text)
+      ]);
+    };
+
+    source.onerror = () => {
+      source.close();
+    };
+
+    return () => {
+      source.close();
+    };
+  }, [apiBaseUrl]);
 
   const executeScenario = async (
     question: string,
@@ -177,15 +251,20 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
         'Step 2 – Preparing graph reasoning steps…',
         'Step 3 – Consolidating the final answer…',
       ];
+      const isDemoScenario = scenarioId.startsWith('DEMO_');
 
-      const introMessage = scenarioIdOverride
-        ? `Scenario ${payload.scenario_name} lancé manuellement. Initialisation du pipeline…`
-        : `Scenario detected (${payload.scenario_name}). Initialising analysis pipeline…`;
+      const introMessage = demoId
+        ? `${payload.scenario_name} pipeline starting...`
+        : scenarioIdOverride
+            ? `Scenario ${payload.scenario_name} manually triggered. Initializing pipeline...`
+            : `Scenario detected (${payload.scenario_name}). Initialising analysis pipeline...`;
 
       appendAssistantMessage(introMessage);
-      for (const step of progressSteps) {
-        await wait(300);
-        appendAssistantMessage(step);
+      if (!isDemoScenario) {
+        for (const step of progressSteps) {
+          await wait(300);
+          appendAssistantMessage(step);
+        }
       }
 
       await wait(300);
@@ -212,10 +291,11 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
           }))
         : [];
 
+      const summaryText = payload.answer || payload.summary || payload.response_text || '';
       const summaryLines = [
         `## ${payload.scenario_name}`,
         '',
-        payload.answer || '',
+        summaryText,
       ];
       const meta: string[] = [];
       if (repoName) {
@@ -239,6 +319,7 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
         links,
         trace: traceLines,
         repo: repoName,
+        graph_steps: payload.graph_steps || undefined,
       });
     } catch (error) {
       console.error('Scenario error:', error);
@@ -248,30 +329,31 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
   };
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || !selectedAgent) return;
+    const trimmedInput = inputValue.trim();
+    if (!trimmedInput) return;
+
+    const requiresAgent = mode === 'ask' || mode === 'agent-auto';
+    if (requiresAgent && !selectedAgent) {
+      appendAssistantMessage("Sélectionnez d'abord un agent avant d'utiliser ce mode.");
+      return;
+    }
 
     const userMessage = makeMessage('user', inputValue);
     setMessages(prev => [...prev, userMessage]);
-    const currentInput = inputValue;
-    const trimmedInput = currentInput.trim();
     setInputValue('');
     setIsLoading(true);
     onScenarioResult?.(null);
 
     try {
-      if (forcedScenarioId) {
-        const kgForQuery = forcedKg || (selectedAgent ? agentKgMap[selectedAgent] : 'grape_unified');
-        const matchesDemo = Boolean(forcedQuestion && forcedQuestion.trim() === trimmedInput);
-        const demoId = matchesDemo ? forcedScenarioId : null;
-        await executeScenario(currentInput, kgForQuery, forcedScenarioId, demoId);
-      } else {
+
+      if (mode === 'ask') {
         const response = await fetch(`${apiBaseUrl}/api/agent/chat`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            message: currentInput,
+            message: trimmedInput,
             graph_id: selectedAgent,
           }),
         });
@@ -287,12 +369,18 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
           appendAssistantMessage(displayContent);
         }
 
-        if (data.is_query) {
-          const kgForQuery = data.suggested_kg || (selectedAgent ? agentKgMap[selectedAgent] : 'grape_unified');
-          await executeScenario(currentInput, kgForQuery);
-        } else {
-          onScenarioResult?.(null);
+        onScenarioResult?.(null);
+      } else if (mode === 'agent-auto') {
+        const kgForQuery = selectedAgent ? (agentKgMap[selectedAgent] ?? 'grape_unified') : 'grape_unified';
+        await executeScenario(trimmedInput, kgForQuery);
+      } else {
+        const config = MODE_CONFIG[mode];
+        const demoId = config.demoId;
+        if (!demoId) {
+          throw new Error('Demo mode mal configuré.');
         }
+        const kgForQuery = config.kg || (selectedAgent ? agentKgMap[selectedAgent] : 'grape_unified');
+        await executeScenario(trimmedInput, kgForQuery, null, demoId);
       }
     } catch (error) {
       console.error('Error calling agent:', error);
@@ -300,9 +388,6 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
       onScenarioResult?.(null);
     } finally {
       setIsLoading(false);
-      setForcedScenarioId(null);
-      setForcedKg(null);
-      setForcedQuestion(null);
     }
   };
 
@@ -313,24 +398,6 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
     }
   };
 
-  const handleShortcut = (shortcut: ShortcutConfig) => {
-    if (shortcut.id === 'auto') {
-      setForcedScenarioId(null);
-      setForcedKg(null);
-      setForcedQuestion(null);
-      setInputValue('');
-      appendAssistantMessage('Mode auto activé : posez votre question, je sélectionnerai automatiquement le scénario adapté.');
-      onScenarioResult?.(null);
-      return;
-    }
-
-    setInputValue(shortcut.question);
-    setForcedScenarioId(shortcut.scenarioId);
-    setForcedKg(shortcut.kg ?? null);
-    setForcedQuestion(shortcut.question);
-    onScenarioResult?.(null);
-  };
-
   return (
     <div className="flex h-full flex-col">
       {/* Chat Header */}
@@ -339,10 +406,7 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
           Conversation
         </h3>
         <p className="text-sm text-[#6B7280] mt-1">
-          {selectedAgent
-            ? 'Chat with your selected agent about the knowledge graph'
-            : 'Please select an agent to start chatting'
-          }
+          Current mode: {currentModeConfig.label}
         </p>
       </div>
 
@@ -366,13 +430,10 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
               </svg>
             </div>
             <h4 className="text-lg font-semibold text-[#1C1C1C] mb-2">
-              Start a Conversation
+              Commencez l’analyse
             </h4>
             <p className="text-[#6B7280] max-w-md">
-              {selectedAgent
-                ? 'Type a message below to start chatting with your agent'
-                : 'Select an agent from the dropdown to begin'
-              }
+              Choisissez un mode ci-dessous, puis saisissez votre question pour lancer le raisonnement.
             </p>
           </div>
         ) : (
@@ -401,7 +462,7 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
                   {message.details && message.details.length > 0 && (
                     <details className="mt-2 rounded-md border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 text-xs text-[#4B5563]">
                       <summary className="cursor-pointer text-[#E57373] font-medium">
-                        Détails de l’orchestration
+                        Reasoning Steps
                       </summary>
                       <ul className="mt-2 space-y-1 list-disc pl-4">
                         {message.details.map((line, index) => (
@@ -437,19 +498,73 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
 
       {/* Input Area */}
       <div className="px-6 pt-4">
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          {scenarioShortcuts.map(shortcut => (
+        <div className="flex flex-col gap-2 mb-4">
+          <div className="relative" ref={modeMenuRef}>
             <button
-              key={shortcut.id}
-              onClick={() => handleShortcut(shortcut)}
-              className="rounded-full border border-[#E5E7EB] px-4 py-2 text-xs font-medium text-[#6B7280] hover:border-[#E57373] hover:text-[#E57373] transition-colors"
               type="button"
+              onClick={() => setModeMenuOpen(prev => !prev)}
+              className="flex w-full items-center justify-between rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-xs font-medium text-[#1C1C1C] hover:border-[#E57373] hover:text-[#E57373] transition-colors"
             >
-              {shortcut.label}
+              <span>Mode : {currentModeConfig.label}</span>
+              <span className={`transition-transform ${modeMenuOpen ? 'rotate-180' : ''}`}>
+                ▾
+              </span>
             </button>
-          ))}
+            {modeMenuOpen && (
+              <div className="absolute z-50 mt-2 w-72 rounded-lg border border-[#E5E7EB] bg-white shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => applyMode('ask')}
+                  className="block w-full px-4 py-3 text-left text-sm text-[#1C1C1C] hover:bg-[#FEF3F3]"
+                >
+                  Ask (LLM only)
+                </button>
+                <div className="border-t border-[#F3F4F6]" />
+                <div className="px-4 py-2 text-xs font-semibold uppercase text-[#9CA3AF] flex items-center justify-between">
+                  <span>Agent</span>
+                  <span className="text-[#D1D5DB]">▸</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => applyMode('agent-auto')}
+                  className="block w-full px-6 py-2 text-left text-sm text-[#1C1C1C] hover:bg-[#FEF3F3]"
+                >
+                  Auto Scenario
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyMode('demo-s1')}
+                  className="block w-full px-6 py-2 text-left text-sm text-[#1C1C1C] hover:bg-[#FEF3F3]"
+                >
+                  Patient Explorer (S1)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyMode('demo-s2')}
+                  className="block w-full px-6 py-2 text-left text-sm text-[#1C1C1C] hover:bg-[#FEF3F3]"
+                >
+                  Path Finder (S2)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyMode('demo-s3')}
+                  className="block w-full px-6 py-2 text-left text-sm text-[#1C1C1C] hover:bg-[#FEF3F3]"
+                >
+                  Risk Verificator (S3)
+                </button>
+                <div className="border-t border-[#F3F4F6]" />
+                <button
+                  type="button"
+                  onClick={() => applyMode('deep')}
+                  className="block w-full px-4 py-3 text-left text-sm text-[#1C1C1C] hover:bg-[#FEF3F3]"
+                >
+                  Deep Reasoning
+                </button>
+              </div>
+            )}
+          </div>
           <span className="text-xs text-[#9CA3AF]">
-            Préremplir une question démo, puis personnalisez avant envoi.
+            {currentModeConfig.helper}
           </span>
         </div>
         <div className="flex gap-2">
@@ -457,14 +572,14 @@ const appendAssistantMessage = (content: string, options?: { markdown?: boolean;
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={selectedAgent ? "Type your message..." : "Select an agent first..."}
-            disabled={!selectedAgent || isLoading}
+            placeholder={textareaPlaceholder}
+            disabled={isLoading}
             rows={1}
             className="flex-1 px-4 py-3 text-sm border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E57373] focus:border-transparent placeholder:text-[#6B7280] resize-none disabled:bg-[#F9FAFB] disabled:cursor-not-allowed"
           />
           <button
             onClick={handleSendMessage}
-            disabled={!selectedAgent || !inputValue.trim() || isLoading}
+            disabled={isLoading || !inputValue.trim() || (requiresAgent && !selectedAgent)}
             className="px-6 py-3 bg-[#E57373] text-white rounded-lg font-medium hover:bg-[#D55555] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <svg

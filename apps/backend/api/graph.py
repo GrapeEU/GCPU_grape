@@ -8,13 +8,11 @@ import io
 router = APIRouter(prefix="/graph", tags=["Graph"])
 
 # Aliases to aggregate multiple repositories into a single response (e.g., unified view)
-REPO_ALIASES: Dict[str, List[str]] = {
-    "unified": ["hearing", "psychiatry"]
-}
+REPO_ALIASES: Dict[str, List[str]] = {}
 
 
 @router.get("/{repo}/data")
-def get_graph_data(repo: str, limit: int = 200):
+def get_graph_data(repo: str, limit: int = 500):
     repo = repo.lower()
     repo_map = settings.get_repo_endpoint
     target_repos = REPO_ALIASES.get(repo, [repo])

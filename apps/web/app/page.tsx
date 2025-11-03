@@ -138,30 +138,45 @@ function GraphPreview() {
 export default function Home() {
   return (
     <div className="flex flex-col items-center px-6 py-16">
-      <section className="flex w-full max-w-5xl flex-col items-center gap-8 text-center">
-        <Image
-          src="/grape_logo.png"
-          alt="Grape Logo"
-          width={140}
-          height={140}
-          priority
-        />
-        <p className="max-w-3xl text-lg text-[#4B5563]">
-          Grape connects medical knowledge across disciplines. We expose the
-          structure behind every answer so researchers and clinicians can trust
-          what the agent finds in their graphs.
+      {/* Hero Section with Logo */}
+      <section className="flex w-full max-w-6xl flex-col items-center gap-12 text-center">
+        <div className="animate-fade-in-up">
+          <Image
+            src="/grape_logo.png"
+            alt="Grape Logo"
+            width={500}
+            height={500}
+            priority
+            className="drop-shadow-2xl"
+          />
+        </div>
+
+        <h2 className="animate-fade-in-up animation-delay-200 max-w-4xl text-5xl font-bold leading-tight text-[#1C1C1C] bg-gradient-to-r from-[#E57373] to-[#F59E0B] bg-clip-text text-transparent">
+          Beyond Hallucination.<br />Verifiable AI Reasoning,<br />Powered by Knowledge.
+        </h2>
+
+        <p className="animate-fade-in-up animation-delay-400 max-w-3xl text-xl leading-relaxed text-[#4B5563]">
+          Grape empowers domain experts to build trustworthy AI systems. We combine
+          the reasoning power of Knowledge Graphs with tiny agents to deliver answers
+          that are transparent, traceable, and free from hallucination.
         </p>
-        <GraphPreview />
       </section>
 
-      <section className="mt-16 grid w-full max-w-5xl gap-6 md:grid-cols-3">
-        {actions.map(({ href, title, description, icon }) => (
+      {/* Graph Preview with animation */}
+      <div className="animate-fade-in-up animation-delay-600 w-full max-w-6xl">
+        <GraphPreview />
+      </div>
+
+      {/* Action Cards with staggered animation */}
+      <section className="mt-24 grid w-full max-w-5xl gap-6 md:grid-cols-3">
+        {actions.map(({ href, title, description, icon }, index) => (
           <Link
             key={href}
             href={href}
-            className="group flex flex-col gap-4 rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-sm transition-transform hover:-translate-y-1 hover:shadow-lg"
+            className="group flex flex-col gap-4 rounded-2xl border border-[#E5E7EB] bg-white p-8 shadow-sm transition-all hover:-translate-y-2 hover:shadow-xl animate-fade-in-up"
+            style={{ animationDelay: `${800 + index * 150}ms` }}
           >
-            <div className="flex items-center justify-center">{icon}</div>
+            <div className="flex items-center justify-center transition-transform group-hover:scale-110">{icon}</div>
             <h2 className="text-xl font-semibold text-[#1C1C1C]">{title}</h2>
             <p className="text-sm leading-relaxed text-[#6B7280]">
               {description}

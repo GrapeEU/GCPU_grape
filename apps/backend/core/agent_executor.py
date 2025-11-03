@@ -18,6 +18,7 @@ from langchain_core.messages import HumanMessage
 from core.config import settings
 from core.agent_logger import AgentLogger, StepType, StepStatus
 from core.vertex_ai_config import get_vertex_ai_chat_model
+import core.demo_pipelines as demo_pipelines
 
 
 class AgentExecutor:
@@ -40,10 +41,16 @@ class AgentExecutor:
         self.prompts_dir = Path(__file__).parent.parent / "prompts"
         self.scenarios = self._load_scenarios()
 
+        self.scenarios = {
+            sid: data for sid, data in self.scenarios.items()
+            if sid != "scenario_3_federation"
+        }
+        if "scenario_4_validation" in self.scenarios:
+            self.scenarios["scenario_4_validation"]["name"] = "S3 – Validation ontologique"
+
         self.scenario_templates: Dict[str, Callable[[Dict[str, Any]], Optional[str]]] = {
             "scenario_1_neighbourhood": self._template_neighbourhood_query,
             "scenario_2_multihop": self._template_multihop_query,
-            "scenario_3_federation": self._template_federation_query,
             "scenario_4_validation": self._template_validation_query,
         }
 
@@ -57,12 +64,7 @@ class AgentExecutor:
             "cbt": "http://example.org/hearing/CognitiveBehavioralTherapy",
         }
 
-        self.demo_questions: Dict[str, str] = {
-            "scenario_1_neighbourhood": "Pour ce patient suivi pour acouphènes (tinnitus) persistants, quels symptômes associés ou facteurs aggravants dois-je explorer en priorité ?",
-            "scenario_2_multihop": "Chez cette patiente atteinte de stress chronique (Chronic Stress) qui commence à perdre l’audition (Hearing Loss), quels enchaînements cliniques expliquent la progression ?",
-            "scenario_3_federation": "Existe-t-il des correspondances documentées entre Tinnitus et Generalized Anxiety Disorder qui appuieraient une prise en charge conjointe ?",
-            "scenario_4_validation": "Peux-tu confirmer si la thérapie cognitivo-comportementale (CBT) est bien enregistrée comme traitement de la perte auditive (Hearing Loss) et citer les alternatives présentes ?",
-        }
+        self.demo_questions: Dict[str, str] = {}
 
         self.prefix_map = {
             "exhear": "http://example.org/hearing/",
@@ -201,6 +203,16 @@ Return ONLY the scenario_id (e.g., "scenario_1_neighbourhood"). No explanation n
             "demo_id": demo_id,
         }
 
+        demo_response = self._handle_demo_request(
+            demo_id=demo_id,
+            scenario_id=scenario_id,
+            question=question,
+            kg_name=kg_name,
+            logger=logger,
+        )
+        if demo_response:
+            return demo_response
+
         scenario = self.get_scenario_by_id(scenario_id)
         if not scenario:
             raise ValueError(f"Unknown scenario: {scenario_id}")
@@ -210,13 +222,6 @@ Return ONLY the scenario_id (e.g., "scenario_1_neighbourhood"). No explanation n
             f"Executing scenario: {scenario['name']}",
             details={"scenario_id": scenario_id, "kg_name": kg_name}
         )
-
-        if demo_id:
-            default_question = self.demo_questions.get(demo_id)
-            if default_question and question.strip().lower() == default_question.strip().lower():
-                demo_result = await self._run_demo_pipeline(demo_id, question, kg_name, logger)
-                if demo_result:
-                    return demo_result
 
         # Use the scenario's system prompt to guide LLM orchestration
         orchestration_prompt = f"""{scenario['system_prompt']}
@@ -271,6 +276,8 @@ Provide the execution plan:"""
             for i, step in enumerate(execution_plan):
                 tool = step["tool"]
                 payload = step["payload"]
+                if isinstance(payload, dict):
+                    payload.setdefault("kg_name", kg_name)
 
                 # Ensure interpret tool receives scenario context
                 if tool == "/mcp/interpret":
@@ -450,17 +457,6 @@ Provide the execution plan:"""
                     results["summary"] = interpret_result.get("interpretation", "")
                     logger.log_interpretation(results["summary"])
 
-            summary_override = await self._maybe_generate_demo_summary(
-                scenario_id,
-                question,
-                kg_name,
-                results,
-                context,
-                logger
-            )
-            if summary_override:
-                results["summary"] = summary_override
-
             logger.log_success(f"Scenario '{scenario['name']}' completed successfully")
 
             final_payload = {
@@ -472,18 +468,6 @@ Provide the execution plan:"""
                 "trace": logger.get_trace(),
                 "trace_formatted": logger.format_for_frontend()
             }
-            if demo_id:
-                demo_result = await self._maybe_execute_demo_fallback(
-                    scenario_id,
-                    demo_id,
-                    question,
-                    kg_name,
-                    logger,
-                    context,
-                )
-                if demo_result:
-                    return demo_result
-
             return final_payload
 
         except json.JSONDecodeError as e:
@@ -503,6 +487,639 @@ Provide the execution plan:"""
 
             logger.log_error(f"Scenario execution failed: {str(e)}", e)
             raise
+
+    def _handle_demo_request(
+        self,
+        demo_id: Optional[str],
+        scenario_id: str,
+        question: str,
+        kg_name: str,
+        logger: AgentLogger,
+    ) -> Optional[Dict[str, Any]]:
+        """Handle new hard-coded demo pipelines (S1/S2/S3/Wow)."""
+        if not demo_id:
+            return None
+
+        repo_key = (kg_name or "grape_unified").replace("grape_", "")
+        if repo_key not in {"demo", "hearing", "psychiatry", "unified"}:
+            repo_key = "unified"
+
+        base_payload = {
+            "scenario": demo_id,
+            "scenario_name": demo_id,
+            "question": question,
+            "kg_name": kg_name,
+            "nodes": [],
+            "links": [],
+            "sparql_queries": [],
+            "repo": repo_key,
+        }
+
+        if demo_id == "S1_PATIENT":
+            logger.log_step(
+                StepType.SCENARIO_DETECTION,
+                "Demo guidee selectionnee : Vue Patient (S1)",
+                details={"demo_id": demo_id},
+            )
+            results, trace, queries = demo_pipelines.run_s1_patient_explore(
+                "expat:PatientJohn", repo_key=repo_key
+            )
+            nodes, links = self._graph_s1_patient()
+            summary = self._llm_demo_summary(
+                logger,
+                title="Patient overview",
+                instructions=(
+                    "Structure the response as four numbered bullet points: "
+                    "(1) recap who the patient is, "
+                    "(2) list the key history and current treatments, "
+                    "(3) highlight the present symptom, "
+                    "(4) end with the clinical question to investigate. "
+                    "Keep the tone concise and professional."
+                ),
+                structured_payload={"patient_uri": "expat:PatientJohn", "facts": results},
+                fallback=self._summarize_patient_results(results, "expat:PatientJohn"),
+                question=question,
+            )
+            logger.log_success("Demo S1 terminee")
+            return {
+                **base_payload,
+                "scenario": "DEMO_S1_PATIENT",
+                "scenario_name": "1. Vue Patient",
+                "summary": summary,
+                "sparql_queries": queries,
+                "nodes": nodes,
+                "links": links,
+                "trace": logger.get_trace(),
+                "trace_formatted": logger.format_for_frontend(),
+            }
+
+        if demo_id == "S2_PATHFINDING":
+            logger.log_step(
+                StepType.SCENARIO_DETECTION,
+                "Demo guidee selectionnee : Liens caches (S2)",
+                details={"demo_id": demo_id},
+            )
+            paths, trace, queries = demo_pipelines.run_s2_pathfinding(
+                "exdrug:E27B", "excommon:AbdominalPain", repo_key=repo_key
+            )
+            nodes, links = self._graph_s2_pathfinding()
+            summary = self._llm_demo_summary(
+                logger,
+                title="Hidden path analysis",
+                instructions=(
+                    "Begin with a short paragraph describing how substance E27B may lead to abdominal pain. "
+                    "Then list both discovered paths as bullet points (format '- Path: node1 → relation → node2 → …'). "
+                    "Finish with one sentence identifying which path is most critical for the patient."
+                ),
+                structured_payload={
+                    "substance": "exdrug:E27B",
+                    "symptom": "excommon:AbdominalPain",
+                    "paths": paths,
+                },
+                fallback=self._summarize_path_results(paths, "exdrug:E27B", "excommon:AbdominalPain"),
+                question=question,
+            )
+            logger.log_success("Demo S2 terminee")
+            return {
+                **base_payload,
+                "scenario": "DEMO_S2_PATHFINDING",
+                "scenario_name": "2. Liens Caches",
+                "summary": summary,
+                "sparql_queries": queries,
+                "nodes": nodes,
+                "links": links,
+                "trace": logger.get_trace(),
+                "trace_formatted": logger.format_for_frontend(),
+            }
+
+        if demo_id == "S3_VALIDATION":
+            logger.log_step(
+                StepType.SCENARIO_DETECTION,
+                "Demo guidee selectionnee : Validation (S3)",
+                details={"demo_id": demo_id},
+            )
+            result, trace, queries = demo_pipelines.run_s3_validation(
+                "expat:PatientJohn", "exmed:Metamorphine", repo_key=repo_key
+            )
+            nodes, links = self._graph_s3_validation()
+            summary = self._llm_demo_summary(
+                logger,
+                title="Ontology validation",
+                instructions=(
+                    "State clearly whether Metamorphine is contraindicated for the patient. "
+                    "In no more than two sentences, explain how the propertyChainAxiom propagates the contraindication from substance E27B to the drug. "
+                    "Conclude with the recommended alternative and, if relevant, a brief clinical recommendation."
+                ),
+                structured_payload={
+                    "patient": "expat:PatientJohn",
+                    "drug": "exmed:Metamorphine",
+                    "result": result,
+                    "trace": trace,
+                },
+                fallback=self._summarize_validation(result, "exmed:Metamorphine"),
+                question=question,
+            )
+            logger.log_success("Demo S3 terminee")
+            return {
+                **base_payload,
+                "scenario": "DEMO_S3_VALIDATION",
+                "scenario_name": "3. Validation",
+                "summary": summary,
+                "sparql_queries": queries,
+                "nodes": nodes,
+                "links": links,
+                "trace": logger.get_trace(),
+                "trace_formatted": logger.format_for_frontend(),
+            }
+
+        if demo_id == "AUTONOMOUS_DEMO":
+            logger.log_step(
+                StepType.SCENARIO_DETECTION,
+                "Demo autonome complete declenchee",
+                details={"demo_id": demo_id, "scenario_id": scenario_id},
+            )
+            fallback_summary, trace_list, queries, storyboard = demo_pipelines.run_autonomous_demo(
+                "expat:PatientJohn", repo_key=repo_key
+            )
+            llm_summary = self._llm_demo_summary(
+                logger,
+                title="Autonomous analysis",
+                instructions=(
+                    "Narrate the investigation in three titled sections (e.g. 'Phase 1 – Patient', 'Phase 2 – Substance', 'Phase 3 – Verdict'), each limited to two sentences. "
+                    "Highlight the pharmacological conflict and finish with the proposed alternative."
+                ),
+                structured_payload=storyboard,
+                fallback=fallback_summary,
+                question=question,
+            )
+            logger.log_success("Demo autonome terminee")
+            nodes, links = self._build_graph_from_sparql(queries, repo_key)
+            if not nodes or len(nodes) == 0:
+                nodes, links = self._demo_full_graph()
+            return {
+                **base_payload,
+                "scenario": "DEMO_AUTONOMOUS",
+                "scenario_name": "Analyse Complete",
+                "summary": llm_summary,
+                "sparql_queries": queries,
+                "nodes": nodes,
+                "links": links,
+                "trace": logger.get_trace(),
+                "trace_formatted": logger.format_for_frontend(),
+            }
+
+        if demo_id == "DEEP_REASONING":
+            logger.log_step(
+                StepType.SCENARIO_DETECTION,
+                "Pipeline Deep Reasoning déclenchée",
+                details={"demo_id": demo_id},
+            )
+            fallback_summary, trace_list, queries, storyboard = demo_pipelines.run_deep_reasoning_demo(
+                "expat:PatientJohn", repo_key=repo_key
+            )
+
+            # Générer la liste de graphes pour le slider
+            graph_steps = self._generate_deep_reasoning_steps()
+
+            # Le graphe principal est le dernier de la liste
+            nodes = graph_steps[-1]["nodes"]
+            links = graph_steps[-1]["links"]
+
+            llm_summary = self._llm_demo_summary(
+                logger,
+                title="Deep Reasoning Pipeline",
+                instructions=(
+                    "Present the reasoning as six numbered steps: "
+                    "(1) patient profile, (2) current medication, (3) substance analysis, "
+                    "(4) symptom pathways, (5) contraindication validation, (6) final recommendation. "
+                    "Each step should fit in a single short sentence and end with the substitution advice."
+                ),
+                structured_payload=storyboard,
+                fallback=fallback_summary,
+                question=question,
+            )
+
+            logger.log_success("Deep Reasoning demo terminée")
+            return {
+                **base_payload,
+                "scenario": "DEMO_DEEP_REASONING",
+                "scenario_name": "Deep Reasoning",
+                "summary": llm_summary,
+                "sparql_queries": queries,
+                "nodes": nodes,
+                "links": links,
+                "graph_steps": graph_steps,
+                "trace": logger.get_trace(),
+                "trace_formatted": logger.format_for_frontend(),
+            }
+
+        return None
+
+    @staticmethod
+    def _summarize_patient_results(results: List[Dict[str, str]], patient_uri: str) -> str:
+        """Format patient neighbourhood results into a short markdown summary."""
+        if not results:
+            return f"### Vue Patient ({patient_uri})\nAucun fait n'a ete retrouve."
+
+        lines = [
+            f"- **{row.get('prop_label', '').strip()}** : {row.get('value_label', '').strip()}"
+            for row in results
+            if row
+        ]
+        body = "\n".join(lines)
+        return f"### Vue Patient ({patient_uri})\n{body}"
+
+    @staticmethod
+    def _summarize_path_results(paths: List[str], substance_uri: str, symptom_uri: str) -> str:
+        """Format multi-hop paths for display."""
+        if not paths:
+            return f"Aucun chemin detecte entre `{substance_uri}` et `{symptom_uri}`."
+
+        body = "\n".join(f"- {path}" for path in paths)
+        return (
+            f"### Liens detectes entre `{substance_uri}` et `{symptom_uri}`\n"
+            f"{body}"
+        )
+
+    @staticmethod
+    def _summarize_validation(result: Dict[str, str], drug_uri: str) -> str:
+        """Format validation outcome and alternative recommendation."""
+        status = result.get("validation", "INCONNU")
+        reason = result.get("reason", "Aucune justification disponible.")
+        alternative = result.get("alternative", "Aucune alternative trouvee.")
+        return (
+            f"### Validation ontologique pour `{drug_uri}`\n"
+            f"- Statut : **{status}**\n"
+            f"- Justification : {reason}\n"
+            f"- Alternative proposee : {alternative}\n"
+        )
+
+    def _llm_demo_summary(
+        self,
+        logger: AgentLogger,
+        title: str,
+        instructions: str,
+        structured_payload: Dict[str, Any],
+        fallback: str = "",
+        question: str = ""
+    ) -> str:
+        """Use the LLM to craft a rich narrative for demo outputs."""
+        try:
+            prompt = (
+                "You are Grape, the semantic medical agent. Follow the instructions exactly.\n"
+                f"Expected title: {title}.\n"
+                f"Instructions: {instructions}\n"
+                f"Original question: {question or 'Not provided'}\n"
+                "Language rule: answer in the same language as the question if it is identifiable; otherwise respond in English.\n"
+                "Raw data (JSON follows):\n"
+                f"{json.dumps(structured_payload, ensure_ascii=False, indent=2)}\n"
+            )
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            content = (response.content or "").strip()
+            if content:
+                logger.log_interpretation(content)
+                return content
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.log_step(
+                StepType.RESULT_INTERPRETATION,
+                "LLM indisponible pour la synthese demo, utilisation du fallback",
+                status=StepStatus.IN_PROGRESS,
+                details={"error": str(exc)}
+            )
+        return fallback or "Summary unavailable for this demo."
+
+    @staticmethod
+    def _build_patient_graph(
+        results: List[Dict[str, str]],
+        central_uri: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        if not results:
+            return [], []
+        nodes: Dict[str, Dict[str, Any]] = {
+            central_uri: {"id": central_uri, "label": "PatientJohn", "type": "patient"}
+        }
+        links: List[Dict[str, Any]] = []
+        for idx, row in enumerate(results, start=1):
+            relation_label = row.get("prop_label", f"relation_{idx}")
+            target_label = row.get("value_label", f"valeur_{idx}")
+            target_id = row.get("value") or f"{central_uri}::{idx}"
+            nodes[target_id] = {
+                "id": target_id,
+                "label": target_label,
+                "type": "concept",
+            }
+            links.append({
+                "source": central_uri,
+                "target": target_id,
+                "label": relation_label,
+            })
+        return list(nodes.values()), links
+
+    def _build_graph_from_sparql(
+        self,
+        queries: List[str],
+        repo_key: str = "unified"
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """
+        Construit un graphe à partir des requêtes SPARQL en exécutant des requêtes
+        de voisinage autour des concepts mentionnés.
+        """
+        from core.sparql_utils import run_sparql_query
+        import re
+
+        nodes_dict: Dict[str, Dict[str, Any]] = {}
+        links_list: List[Dict[str, Any]] = []
+
+        # Extraire tous les URIs des requêtes
+        focus_uris = set()
+
+        # Préfixes de base
+        prefix_map = {
+            "expat": "http://example.org/patient/",
+            "exmed": "http://example.org/medication/",
+            "exdrug": "http://example.org/drug/",
+            "excond": "http://example.org/condition/",
+            "excommon": "http://example.org/common/"
+        }
+
+        for query in queries:
+            # Chercher les URIs dans la forme <http://...>
+            for match in re.finditer(r'<(http://example\.org/[^>]+)>', query):
+                focus_uris.add(f"<{match.group(1)}>")
+            # Chercher les préfixes (expat:, exmed:, etc.)
+            for match in re.finditer(r'\b(expat|exmed|exdrug|excond|excommon):([A-Za-z0-9_]+)', query):
+                prefix = match.group(1)
+                local_name = match.group(2)
+                # Convertir en URI complet
+                if prefix in prefix_map:
+                    full_uri = f"<{prefix_map[prefix]}{local_name}>"
+                    focus_uris.add(full_uri)
+
+        # Pour chaque URI, récupérer ses voisins
+        for uri in focus_uris:
+            # Requête pour les relations sortantes
+            neighbourhood_query = f"""
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            SELECT ?source ?relation ?target ?sourceLabel ?targetLabel ?relationLabel
+            WHERE {{
+              {{
+                {uri} ?relation ?target .
+                FILTER(isURI(?target))
+                BIND({uri} AS ?source)
+              }}
+              UNION
+              {{
+                ?source ?relation {uri} .
+                FILTER(isURI(?source))
+                BIND({uri} AS ?target)
+              }}
+              OPTIONAL {{ ?source rdfs:label ?sourceLabel }}
+              OPTIONAL {{ ?target rdfs:label ?targetLabel }}
+              OPTIONAL {{ ?relation rdfs:label ?relationLabel }}
+            }}
+            LIMIT 50
+            """
+
+            try:
+                results = run_sparql_query(repo_key, neighbourhood_query)
+                if isinstance(results, list):
+                    for row in results:
+                        source = row.get("source", "")
+                        target = row.get("target", "")
+                        relation = row.get("relation", "")
+
+                        if not source or not target or not relation:
+                            continue
+
+                        # Ajouter les nœuds
+                        if source not in nodes_dict:
+                            nodes_dict[source] = {
+                                "id": source,
+                                "label": row.get("sourceLabel") or source.split("/")[-1].split(":")[-1],
+                                "type": self._infer_node_type(source)
+                            }
+                        if target not in nodes_dict:
+                            nodes_dict[target] = {
+                                "id": target,
+                                "label": row.get("targetLabel") or target.split("/")[-1].split(":")[-1],
+                                "type": self._infer_node_type(target)
+                            }
+
+                        # Ajouter le lien
+                        relation_label = row.get("relationLabel") or relation.split("/")[-1].split(":")[-1]
+                        links_list.append({
+                            "source": source,
+                            "target": target,
+                            "label": relation_label,
+                            "relation": relation
+                        })
+            except Exception as e:
+                print(f"[WARN] Failed to fetch neighbourhood for {uri}: {e}")
+                continue
+
+        return list(nodes_dict.values()), links_list
+
+    def _infer_node_type(self, uri: str) -> str:
+        """Inférer le type de nœud à partir de l'URI."""
+        if "patient" in uri.lower():
+            return "patient"
+        elif "medication" in uri.lower() or "med:" in uri:
+            return "medication"
+        elif "drug:" in uri or "substance" in uri.lower():
+            return "substance"
+        elif "condition" in uri.lower() or "cond:" in uri:
+            return "condition"
+        elif "symptom" in uri.lower() or "pain" in uri.lower() or "discomfort" in uri.lower():
+            return "symptom"
+        elif "procedure" in uri.lower() or "ectomy" in uri.lower():
+            return "procedure"
+        elif "organ" in uri.lower() or "kidney" in uri.lower() or "liver" in uri.lower():
+            return "organ"
+        return "entity"
+
+    def _graph_s1_patient(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Graphe S1 : Vue complète du patient John"""
+        nodes: Dict[str, Dict[str, Any]] = {
+            "expat:PatientJohn": {"id": "expat:PatientJohn", "label": "Patient John", "type": "patient"},
+            "excond:DiabetesMellitus": {"id": "excond:DiabetesMellitus", "label": "Diabetes Mellitus", "type": "condition"},
+            "excond:Hypertension": {"id": "excond:Hypertension", "label": "Hypertension", "type": "condition"},
+            "excond:ChronicKidneyDisease": {"id": "excond:ChronicKidneyDisease", "label": "Chronic Kidney Disease", "type": "condition"},
+            "excond:Nephrectomy2005": {"id": "excond:Nephrectomy2005", "label": "Nephrectomy (2005)", "type": "procedure"},
+            "excommon:AbdominalPain": {"id": "excommon:AbdominalPain", "label": "Abdominal Pain", "type": "symptom"},
+            "excommon:Fatigue": {"id": "excommon:Fatigue", "label": "Fatigue", "type": "symptom"},
+            "exmed:Metamorphine": {"id": "exmed:Metamorphine", "label": "Metamorphine", "type": "medication"},
+            "exmed:Lisinopril": {"id": "exmed:Lisinopril", "label": "Lisinopril", "type": "medication"},
+            "exmed:Atorvastatin": {"id": "exmed:Atorvastatin", "label": "Atorvastatin", "type": "medication"},
+        }
+
+        def edge(source: str, relation: str, target: str) -> Dict[str, Any]:
+            return {"source": source, "target": target, "label": relation}
+
+        links: List[Dict[str, Any]] = [
+            edge("expat:PatientJohn", "hasCondition", "excond:DiabetesMellitus"),
+            edge("expat:PatientJohn", "hasCondition", "excond:Hypertension"),
+            edge("expat:PatientJohn", "hasCondition", "excond:ChronicKidneyDisease"),
+            edge("expat:PatientJohn", "hasProcedure", "excond:Nephrectomy2005"),
+            edge("expat:PatientJohn", "hasSymptom", "excommon:AbdominalPain"),
+            edge("expat:PatientJohn", "hasSymptom", "excommon:Fatigue"),
+            edge("expat:PatientJohn", "takesMedication", "exmed:Metamorphine"),
+            edge("expat:PatientJohn", "takesMedication", "exmed:Lisinopril"),
+            edge("expat:PatientJohn", "takesMedication", "exmed:Atorvastatin"),
+        ]
+
+        return list(nodes.values()), links
+
+    def _graph_s2_pathfinding(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Graphe S2 : Les 2 chemins entre E27B et AbdominalPain"""
+        nodes: Dict[str, Dict[str, Any]] = {
+            "exdrug:E27B": {"id": "exdrug:E27B", "label": "Substance E27B", "type": "substance"},
+            "excommon:StomachDiscomfort": {"id": "excommon:StomachDiscomfort", "label": "Stomach Discomfort", "type": "symptom"},
+            "excommon:AbdominalPain": {"id": "excommon:AbdominalPain", "label": "Abdominal Pain", "type": "symptom"},
+            "excond:PostNephrectomyStatus": {"id": "excond:PostNephrectomyStatus", "label": "Post-Nephrectomy Status", "type": "condition"},
+        }
+
+        def edge(source: str, relation: str, target: str) -> Dict[str, Any]:
+            return {"source": source, "target": target, "label": relation}
+
+        links: List[Dict[str, Any]] = [
+            # Chemin 1: E27B → causesSymptom → StomachDiscomfort → semanticallySimilarTo → AbdominalPain
+            edge("exdrug:E27B", "causesSymptom", "excommon:StomachDiscomfort"),
+            edge("excommon:StomachDiscomfort", "semanticallySimilarTo", "excommon:AbdominalPain"),
+            # Chemin 2: E27B → contraindicatedFor → PostNephrectomyStatus → typicalSymptom → AbdominalPain
+            edge("exdrug:E27B", "contraindicatedFor", "excond:PostNephrectomyStatus"),
+            edge("excond:PostNephrectomyStatus", "typicalSymptom", "excommon:AbdominalPain"),
+        ]
+
+        return list(nodes.values()), links
+
+    def _graph_s3_validation(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Graphe S3 : Validation + alternative"""
+        nodes: Dict[str, Dict[str, Any]] = {
+            "expat:PatientJohn": {"id": "expat:PatientJohn", "label": "Patient John", "type": "patient"},
+            "excond:Nephrectomy2005": {"id": "excond:Nephrectomy2005", "label": "Nephrectomy (2005)", "type": "procedure"},
+            "excond:PostNephrectomyStatus": {"id": "excond:PostNephrectomyStatus", "label": "Post-Nephrectomy Status", "type": "condition"},
+            "exmed:Metamorphine": {"id": "exmed:Metamorphine", "label": "Metamorphine ⚠️", "type": "medication"},
+            "exdrug:E27B": {"id": "exdrug:E27B", "label": "Substance E27B", "type": "substance"},
+            "excond:DiabetesMellitus": {"id": "excond:DiabetesMellitus", "label": "Diabetes Mellitus", "type": "condition"},
+            "exmed:Glucorin": {"id": "exmed:Glucorin", "label": "Glucorin ✓", "type": "medication"},
+        }
+
+        def edge(source: str, relation: str, target: str) -> Dict[str, Any]:
+            return {"source": source, "target": target, "label": relation}
+
+        links: List[Dict[str, Any]] = [
+            # Patient status
+            edge("expat:PatientJohn", "hasProcedure", "excond:Nephrectomy2005"),
+            edge("excond:Nephrectomy2005", "resultsInCondition", "excond:PostNephrectomyStatus"),
+            edge("expat:PatientJohn", "hasCondition", "excond:DiabetesMellitus"),
+            # Metamorphine contraindication
+            edge("exmed:Metamorphine", "hasActiveSubstance", "exdrug:E27B"),
+            edge("exdrug:E27B", "contraindicatedFor", "excond:PostNephrectomyStatus"),
+            edge("exmed:Metamorphine", "contraindicatedFor", "excond:PostNephrectomyStatus"),
+            edge("exmed:Metamorphine", "indicatedFor", "excond:DiabetesMellitus"),
+            # Alternative
+            edge("exmed:Glucorin", "indicatedFor", "excond:DiabetesMellitus"),
+        ]
+
+        return list(nodes.values()), links
+
+    def _demo_full_graph(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Graphe hardcodé (fallback)."""
+        nodes: Dict[str, Dict[str, Any]] = {
+            "expat:PatientJohn": {"id": "expat:PatientJohn", "label": "Patient John", "type": "patient"},
+            "exmed:Metamorphine": {"id": "exmed:Metamorphine", "label": "Metamorphine", "type": "medication"},
+            "exdrug:E27B": {"id": "exdrug:E27B", "label": "Substance E27B", "type": "substance"},
+            "excond:PostNephrectomyStatus": {"id": "excond:PostNephrectomyStatus", "label": "Post-Nephrectomy Status", "type": "condition"},
+            "excommon:StomachDiscomfort": {"id": "excommon:StomachDiscomfort", "label": "Stomach Discomfort", "type": "symptom"},
+            "excommon:AbdominalPain": {"id": "excommon:AbdominalPain", "label": "Abdominal Pain", "type": "symptom"},
+            "excond:Nephrectomy2005": {"id": "excond:Nephrectomy2005", "label": "Nephrectomy (2005)", "type": "procedure"},
+            "excond:DiabetesMellitus": {"id": "excond:DiabetesMellitus", "label": "Diabetes Mellitus", "type": "condition"},
+            "exmed:Glucorin": {"id": "exmed:Glucorin", "label": "Glucorin", "type": "medication"},
+        }
+
+        def edge(source: str, relation: str, target: str) -> Dict[str, Any]:
+            return {"source": source, "target": target, "label": relation}
+
+        links: List[Dict[str, Any]] = [
+            edge("expat:PatientJohn", "hasCondition", "excond:DiabetesMellitus"),
+            edge("expat:PatientJohn", "hasProcedure", "excond:Nephrectomy2005"),
+            edge("expat:PatientJohn", "hasSymptom", "excommon:AbdominalPain"),
+            edge("expat:PatientJohn", "takesMedication", "exmed:Metamorphine"),
+            edge("excond:Nephrectomy2005", "resultsInCondition", "excond:PostNephrectomyStatus"),
+            edge("exmed:Metamorphine", "hasActiveSubstance", "exdrug:E27B"),
+            edge("exmed:Metamorphine", "indicatedFor", "excond:DiabetesMellitus"),
+            edge("exdrug:E27B", "causesSymptom", "excommon:StomachDiscomfort"),
+            edge("excommon:StomachDiscomfort", "semanticallySimilarTo", "excommon:AbdominalPain"),
+            edge("exdrug:E27B", "contraindicatedFor", "excond:PostNephrectomyStatus"),
+            edge("excond:PostNephrectomyStatus", "typicalSymptom", "excommon:AbdominalPain"),
+            edge("exmed:Metamorphine", "contraindicatedFor", "excond:PostNephrectomyStatus"),
+            edge("exmed:Glucorin", "indicatedFor", "excond:DiabetesMellitus"),
+        ]
+
+        return list(nodes.values()), links
+
+    def _generate_deep_reasoning_steps(self) -> List[Dict[str, Any]]:
+        """Génère la liste de graphes pour le Deep Reasoning (slider)"""
+
+        # Étape 1: Patient John
+        step1_nodes, step1_links = self._graph_s1_patient()
+
+        # Étape 2: Médicament Metamorphine
+        step2_nodes = [
+            {"id": "exmed:Metamorphine", "label": "Metamorphine", "type": "medication"},
+            {"id": "exdrug:E27B", "label": "Substance E27B", "type": "substance"},
+            {"id": "excond:DiabetesMellitus", "label": "Diabetes Mellitus", "type": "condition"},
+        ]
+        step2_links = [
+            {"source": "exmed:Metamorphine", "target": "exdrug:E27B", "label": "hasActiveSubstance"},
+            {"source": "exmed:Metamorphine", "target": "excond:DiabetesMellitus", "label": "indicatedFor"},
+        ]
+
+        # Étape 3: Substance E27B et effets
+        step3_nodes = [
+            {"id": "exdrug:E27B", "label": "Substance E27B", "type": "substance"},
+            {"id": "excommon:StomachDiscomfort", "label": "Stomach Discomfort", "type": "symptom"},
+            {"id": "excommon:Nausea", "label": "Nausea", "type": "symptom"},
+            {"id": "excond:PostNephrectomyStatus", "label": "Post-Nephrectomy Status", "type": "condition"},
+            {"id": "excommon:Kidney", "label": "Kidney", "type": "organ"},
+        ]
+        step3_links = [
+            {"source": "exdrug:E27B", "target": "excommon:StomachDiscomfort", "label": "causesSymptom"},
+            {"source": "exdrug:E27B", "target": "excommon:Nausea", "label": "causesSymptom"},
+            {"source": "exdrug:E27B", "target": "excond:PostNephrectomyStatus", "label": "contraindicatedFor"},
+            {"source": "exdrug:E27B", "target": "excommon:Kidney", "label": "affectsOrgan"},
+        ]
+
+        # Étape 4: Chemins E27B → AbdominalPain
+        step4_nodes, step4_links = self._graph_s2_pathfinding()
+
+        # Étape 5: Validation avec contre-indication
+        step5_nodes, step5_links = self._graph_s3_validation()
+
+        # Étape 6: Graphe final avec alternative
+        step6_nodes = [
+            {"id": "expat:PatientJohn", "label": "Patient John", "type": "patient"},
+            {"id": "excond:DiabetesMellitus", "label": "Diabetes Mellitus", "type": "condition"},
+            {"id": "exmed:Metamorphine", "label": "Metamorphine ⚠️", "type": "medication"},
+            {"id": "exmed:Glucorin", "label": "Glucorin ✓ SAFE", "type": "medication"},
+            {"id": "excond:PostNephrectomyStatus", "label": "Post-Nephrectomy Status", "type": "condition"},
+        ]
+        step6_links = [
+            {"source": "expat:PatientJohn", "target": "excond:DiabetesMellitus", "label": "hasCondition"},
+            {"source": "expat:PatientJohn", "target": "excond:PostNephrectomyStatus", "label": "hasCondition"},
+            {"source": "exmed:Metamorphine", "target": "excond:DiabetesMellitus", "label": "indicatedFor"},
+            {"source": "exmed:Metamorphine", "target": "excond:PostNephrectomyStatus", "label": "CONTRAINDICATED"},
+            {"source": "exmed:Glucorin", "target": "excond:DiabetesMellitus", "label": "indicatedFor"},
+        ]
+
+        return [
+            {"title": "Step 1: Patient John Medical Record", "nodes": step1_nodes, "links": step1_links},
+            {"title": "Step 2: Current Medication (Metamorphine)", "nodes": step2_nodes, "links": step2_links},
+            {"title": "Step 3: Substance E27B Analysis", "nodes": step3_nodes, "links": step3_links},
+            {"title": "Step 4: Paths to Abdominal Pain", "nodes": step4_nodes, "links": step4_links},
+            {"title": "Step 5: Validation and Contraindication", "nodes": step5_nodes, "links": step5_links},
+            {"title": "Step 6: Final Recommendation", "nodes": step6_nodes, "links": step6_links},
+        ]
 
     def _prepare_sparql_payload(
         self,
@@ -730,81 +1347,6 @@ WHERE {{
 }}
 LIMIT 50"""
 
-    async def _maybe_generate_demo_summary(
-        self,
-        scenario_id: str,
-        question: str,
-        kg_name: str,
-        results: Dict[str, Any],
-        context: Dict[str, Any],
-        logger: AgentLogger
-    ) -> str:
-        """Ensure deterministic demos still pass through the interpret MCP with tailored guidance."""
-        if scenario_id != "scenario_1_neighbourhood":
-            return ""
-
-        rows = context.get("last_sparql_results", [])
-        if not rows:
-            return ""
-
-        csv_content = self._rows_to_csv(rows)
-        if not csv_content:
-            return ""
-
-        guidance = self._build_demo_guidance(
-            scenario_id,
-            question,
-            results,
-            rows,
-            context=context
-        )
-
-        payload: Dict[str, Any] = {
-            "question": question,
-            "kg_name": kg_name,
-            "sparql_results": csv_content,
-            "scenario_id": scenario_id
-        }
-        if guidance:
-            payload["guidance"] = guidance
-
-        interpret_result = await self.call_mcp_tool(
-            "/mcp/interpret",
-            payload,
-            logger
-        )
-
-        summary = interpret_result.get("interpretation", "")
-        if summary:
-            logger.log_interpretation(summary)
-        return summary
-
-    def _determine_focus_concept(
-        self,
-        results: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Optional[str], str]:
-        """Infer the primary concept URI and a human-readable label for neighbourhood summaries."""
-        context = context or {}
-        concept_uris = context.get("concept_uris", [])
-        primary_uri = concept_uris[0] if concept_uris else None
-
-        focus_label = self._infer_label(primary_uri) if primary_uri else None
-        if not focus_label:
-            entities = context.get("entities", [])
-            focus_label = entities[0] if entities else context.get("question", "")
-        focus_label = (focus_label or "the concept").strip() or "the concept"
-
-        if not primary_uri:
-            focus_lower = focus_label.lower()
-            for node in results.get("nodes", []):
-                label = (node.get("label") or "").lower()
-                if label and (focus_lower in label or label in focus_lower):
-                    primary_uri = node.get("id")
-                    break
-
-        return primary_uri, focus_label
-
     def _format_csv_value(self, value: Any) -> str:
         if value is None:
             return ""
@@ -835,78 +1377,6 @@ LIMIT 50"""
             )
 
         return "\n".join(csv_lines)
-
-    def _build_demo_guidance(
-        self,
-        scenario_id: str,
-        question: str,
-        results: Dict[str, Any],
-        rows: List[Dict[str, Any]],
-        context: Optional[Dict[str, Any]] = None,
-        extra: Optional[Dict[str, Any]] = None
-    ) -> str:
-        extra = extra or {}
-        if scenario_id == "scenario_1_neighbourhood":
-            _, focus_label = self._determine_focus_concept(results, context)
-            relation_names = {
-                self._infer_label(link.get("relation")) for link in results.get("links", [])
-                if link.get("relation")
-            }
-            relation_names.discard("")
-            relation_names_sorted = sorted(relation_names)
-            relation_excerpt = ", ".join(relation_names_sorted[:5])
-            link_count = len(results.get("links", []))
-            node_count = len(results.get("nodes", []))
-
-            return (
-                f"Focus concept: {focus_label}. There are {link_count} edges across {node_count} nodes "
-                f"for the user question \"{question}\". If helpful, relation predicates include: {relation_excerpt or 'see CSV'}.\n"
-                "Produce one paragraph connecting the focus concept to its neighbourhood, followed by up to four bullet points "
-                "each describing a relation (format '- relation: source -> target'). Conclude with a sentence suggesting how this "
-                "neighbourhood answers the question."
-            )
-
-        if scenario_id == "scenario_2_multihop":
-            source_label = extra.get("source_label", "Source concept")
-            target_label = extra.get("target_label", "Target concept")
-            path_samples = extra.get("paths", []) or []
-            sample_text = "; ".join(path_samples[:2])
-            return (
-                f"Map out how {source_label} may progress toward {target_label} using the hop sequences returned in the CSV. "
-                f"There are {len(rows)} rows describing path segments. Explain the overall storyline in a short paragraph "
-                "highlighting intermediate risk factors. Then add a bullet list with up to three representative paths (start → … → end). "
-                f"If you need inspiration, example path sketches: {sample_text or 'see CSV rows'}."
-            )
-
-        if scenario_id == "scenario_3_federation":
-            alignment_count = extra.get("alignment_count", len(rows))
-            top_pairs = extra.get("top_pairs", []) or []
-            sample_text = "; ".join(top_pairs[:3])
-            return (
-                "Present the cross-ontology matches between the hearing and psychiatry graphs. "
-                f"Acknowledge that {alignment_count} alignment row(s) are available. "
-                "Write a concise explanatory paragraph describing how the ontologies overlap, then enumerate 2-3 bullet highlights "
-                "showing the matched concept pairs (format '- Hearing concept ↔ Psychiatry concept'). "
-                f"Use pairs such as {sample_text or 'those surfaced in the CSV'} to ground the explanation. "
-                "Close by explaining why these overlaps matter for the user's question."
-            )
-
-        if scenario_id == "scenario_4_validation":
-            subject_label = extra.get("subject_label", "Subject concept")
-            therapy_label = extra.get("therapy_label", "Target concept")
-            direct_edge = extra.get("has_direct_edge", False)
-            other_treatments = extra.get("other_treatments", [])
-            other_text = ", ".join(other_treatments[:3])
-            return (
-                f"Validate whether the knowledge graph contains a direct treatment edge linking {subject_label} to {therapy_label}. "
-                f"The CSV lists candidate relations; treat them as evidence. "
-                "Draft an answer that states clearly if the direct edge exists, cites the predicate used when present, "
-                "and mentions alternative treatments when relevant. "
-                f"Detected alternative treatments: {other_text or 'none surfaced beyond the CSV rows'}. "
-                "End with one sentence about how this validation could guide clinicians or analysts."
-            )
-
-        return ""
 
     async def _handle_interpret_request(
         self,
@@ -968,184 +1438,6 @@ LIMIT 50"""
             interpretation = "Une erreur est survenue pendant la synthèse. Merci de réessayer ultérieurement."
 
         return {"interpretation": interpretation}
-
-    async def _interpret_demo_summary(
-        self,
-        scenario_id: str,
-        question: str,
-        kg_name: str,
-        rows: List[Dict[str, Any]],
-        results: Dict[str, Any],
-        logger: AgentLogger,
-        context: Optional[Dict[str, Any]] = None,
-        extra: Optional[Dict[str, Any]] = None,
-        fallback: str = ""
-    ) -> str:
-        csv_content = self._rows_to_csv(rows)
-        if not csv_content:
-            return fallback
-
-        guidance = self._build_demo_guidance(
-            scenario_id,
-            question,
-            results,
-            rows,
-            context=context,
-            extra=extra
-        )
-
-        payload: Dict[str, Any] = {
-            "question": question,
-            "kg_name": kg_name,
-            "sparql_results": csv_content,
-            "scenario_id": scenario_id
-        }
-        if guidance:
-            payload["guidance"] = guidance
-
-        try:
-            interpret_result = await self.call_mcp_tool(
-                "/mcp/interpret",
-                payload,
-                logger
-            )
-        except Exception:
-            return fallback
-
-        summary = interpret_result.get("interpretation", "") if interpret_result else ""
-        return summary or fallback
-
-    async def _maybe_execute_demo_fallback(
-        self,
-        scenario_id: str,
-        demo_id: Optional[str],
-        question: str,
-        kg_name: str,
-        logger: AgentLogger,
-        context: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
-        if not demo_id or scenario_id != demo_id:
-            return None
-
-        if context.get("last_sparql_results"):
-            return None
-
-        logger.log_step(
-            StepType.SPARQL_QUERY,
-            "Falling back to curated demo pipeline",
-            details={"scenario": scenario_id, "question": question}
-        )
-
-        return await self._run_demo_pipeline(demo_id, question, kg_name, logger)
-
-    async def _run_demo_pipeline(
-        self,
-        scenario_id: str,
-        question: str,
-        kg_name: str,
-        logger: AgentLogger,
-    ) -> Optional[Dict[str, Any]]:
-        demo_handlers = {
-            "scenario_1_neighbourhood": self._execute_neighbourhood_demo,
-            "scenario_2_multihop": self._execute_multihop_demo,
-            "scenario_3_federation": self._execute_federation_demo,
-            "scenario_4_validation": self._execute_validation_demo,
-        }
-        handler = demo_handlers.get(scenario_id)
-        if not handler:
-            return None
-        return await handler(question, kg_name, logger)
-
-    async def _execute_neighbourhood_demo(
-        self,
-        question: str,
-        kg_name: str,
-        logger: AgentLogger
-    ) -> Dict[str, Any]:
-        focus_uri = self.known_concept_map.get("tinnitus")
-        if not focus_uri:
-            raise ValueError("Demo URI for neighbourhood scenario not configured.")
-
-        query = self._template_neighbourhood_query({"concept_uris": [focus_uri]})
-        sparql_response = await self.call_mcp_tool(
-            "/mcp/sparql",
-            {"query": query, "kg_name": kg_name},
-            logger
-        )
-
-        rows = sparql_response.get("results", [])
-        if not rows:
-            logger.log_step(
-                StepType.SPARQL_QUERY,
-                "Demo dataset returned no neighbourhood rows; using canned triples",
-                status=StepStatus.IN_PROGRESS,
-            )
-            rows = [
-                {
-                    "source": focus_uri,
-                    "relation": "http://example.org/hearing/hasSymptom",
-                    "target": "http://example.org/hearing/SleepDisturbance",
-                    "sourceLabel": "Tinnitus",
-                    "targetLabel": "Sleep disturbance linked to auditory disorder",
-                },
-                {
-                    "source": focus_uri,
-                    "relation": "http://example.org/hearing/hasTreatment",
-                    "target": "http://example.org/hearing/CognitiveBehavioralTherapy",
-                    "sourceLabel": "Tinnitus",
-                    "targetLabel": "Cognitive Behavioral Therapy",
-                },
-                {
-                    "source": focus_uri,
-                    "relation": "http://example.org/hearing/hasRiskFactor",
-                    "target": "http://example.org/hearing/NoiseExposure",
-                    "sourceLabel": "Tinnitus",
-                    "targetLabel": "Noise exposure",
-                },
-            ]
-
-        results: Dict[str, Any] = {
-            "nodes": [],
-            "links": [],
-            "sparql_queries": [query],
-        }
-        demo_context = {
-            "concept_uris": [focus_uri],
-            "last_sparql_results": rows,
-        }
-        self._merge_graph_results(results, rows, demo_context, "scenario_1_neighbourhood")
-
-        summary_result = await self._handle_interpret_request(
-            {
-                "question": question,
-                "sparql_results": self._rows_to_csv(rows),
-                "kg_name": kg_name,
-                "scenario_id": "scenario_1_neighbourhood",
-            },
-            question,
-            results,
-            demo_context,
-            "scenario_1_neighbourhood",
-            kg_name,
-            logger,
-        )
-
-        summary = summary_result.get("interpretation", "")
-        logger.log_interpretation(summary)
-        logger.log_success("Neighbourhood demo scenario completed")
-
-        return {
-            "scenario": "scenario_1_neighbourhood",
-            "scenario_name": "Neighbourhood Exploration (Demo)",
-            "question": question,
-            "kg_name": kg_name,
-            "nodes": results["nodes"],
-            "links": results["links"],
-            "summary": summary,
-            "sparql_queries": results.get("sparql_queries", []),
-            "trace": logger.get_trace(),
-            "trace_formatted": logger.format_for_frontend(),
-        }
 
     def _merge_graph_results(
         self,
@@ -1373,635 +1665,6 @@ LIMIT 50"""
             if base:
                 return f"{base}{local}"
         return uri
-
-    async def _execute_multihop_demo(
-        self,
-        question: str,
-        kg_name: str,
-        logger: AgentLogger
-    ) -> Dict[str, Any]:
-        logger.log_step(
-            StepType.SCENARIO_DETECTION,
-            "Executing deterministic multi-hop demo pipeline",
-            details={"question": question}
-        )
-
-        source_uri = self.known_concept_map.get("chronic stress")
-        target_uri = self.known_concept_map.get("hearing loss")
-
-        if not source_uri or not target_uri:
-            raise ValueError("Demo URIs for multi-hop scenario not configured.")
-
-        query = f"""PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-SELECT ?source ?relation1 ?intermediate1 ?relation2 ?intermediate2 ?relation3 ?target ?label1 ?label2
-WHERE {{
-  BIND(<{source_uri}> AS ?source)
-  BIND(<{target_uri}> AS ?target)
-
-  {{
-    ?source ?relation1 ?target .
-    BIND("" AS ?intermediate1)
-    BIND("" AS ?relation2)
-    BIND("" AS ?intermediate2)
-    BIND("" AS ?relation3)
-    BIND("" AS ?label1)
-    BIND("" AS ?label2)
-  }}
-  UNION
-  {{
-    ?source ?relation1 ?intermediate1 .
-    ?intermediate1 ?relation2 ?target .
-    OPTIONAL {{ ?intermediate1 rdfs:label ?label1 }}
-    BIND("" AS ?intermediate2)
-    BIND("" AS ?relation3)
-    BIND("" AS ?label2)
-  }}
-  UNION
-  {{
-    ?source ?relation1 ?intermediate1 .
-    ?intermediate1 ?relation2 ?intermediate2 .
-    ?intermediate2 ?relation3 ?target .
-    OPTIONAL {{ ?intermediate1 rdfs:label ?label1 }}
-    OPTIONAL {{ ?intermediate2 rdfs:label ?label2 }}
-  }}
-}}
-LIMIT 50"""
-
-        logger.log_step(
-            StepType.SPARQL_QUERY,
-            "Executing deterministic multi-hop SPARQL query",
-            details={"query_preview": query[:200]}
-        )
-
-        sparql_response = await self.call_mcp_tool(
-            "/mcp/sparql",
-            {"query": query, "kg_name": kg_name},
-            logger
-        )
-
-        rows = sparql_response.get("results", [])
-        logger.log_sparql_query(query, len(rows))
-
-        if not rows:
-            logger.log_step(
-                StepType.SPARQL_QUERY,
-                "No multi-hop paths returned; using curated demo walk-through",
-                status=StepStatus.IN_PROGRESS,
-                details={"fallback": True}
-            )
-            rows = [
-                {
-                    "source": source_uri,
-                    "relation1": "manifests as",
-                    "intermediate1": "http://example.org/psychiatry/SleepDisturbance",
-                    "relation2": "worsens",
-                    "intermediate2": "",
-                    "relation3": "",
-                    "target": target_uri,
-                    "label1": "Sleep disturbance",
-                    "label2": "",
-                },
-                {
-                    "source": source_uri,
-                    "relation1": "linked to",
-                    "intermediate1": "http://example.org/hearing/SleepDisturbance",
-                    "relation2": "worsens",
-                    "intermediate2": "",
-                    "relation3": "",
-                    "target": target_uri,
-                    "label1": "Sleep disturbance",
-                    "label2": "",
-                },
-                {
-                    "source": source_uri,
-                    "relation1": "manifests as",
-                    "intermediate1": "http://example.org/psychiatry/AnxietyAmplification",
-                    "relation2": "drives",
-                    "intermediate2": "http://example.org/hearing/SleepDisturbance",
-                    "relation3": "worsens",
-                    "target": target_uri,
-                    "label1": "Anxiety amplification",
-                    "label2": "Sleep disturbance",
-                },
-            ]
-
-        nodes: List[Dict[str, Any]] = []
-        links: List[Dict[str, Any]] = []
-        path_descriptions: List[str] = []
-
-        def repo_tag_for_uri(uri: Optional[str]) -> Optional[str]:
-            if not uri:
-                return None
-            lowered = uri.lower()
-            if "psychiatry" in lowered:
-                return "psychiatry"
-            if "hearing" in lowered:
-                return "hearing"
-            if "demo" in lowered:
-                return "demo"
-            return None
-
-        def ensure_node(uri: str, label: str = ""):
-            if not uri:
-                return
-            existing = next((n for n in nodes if n["id"] == uri), None)
-            repo_tag = repo_tag_for_uri(uri)
-            if existing:
-                if repo_tag:
-                    repos = set(existing.get("sourceRepos", []))
-                    if repo_tag not in repos:
-                        repos.add(repo_tag)
-                        existing["sourceRepos"] = sorted(repos)
-                        if len(existing["sourceRepos"]) == 1:
-                            existing["sourceRepo"] = existing["sourceRepos"][0]
-                return
-
-            payload: Dict[str, Any] = {
-                "id": uri,
-                "label": label or self._infer_label(uri),
-                "type": "concept",
-            }
-            if repo_tag:
-                payload["sourceRepo"] = repo_tag
-                payload["sourceRepos"] = [repo_tag]
-            nodes.append(payload)
-
-        for row in rows:
-            src = row.get("source")
-            rel1 = row.get("relation1")
-            inter1 = row.get("intermediate1")
-            rel2 = row.get("relation2")
-            inter2 = row.get("intermediate2")
-            rel3 = row.get("relation3")
-            tgt = row.get("target")
-            label1 = row.get("label1", "")
-            label2 = row.get("label2", "")
-
-            ensure_node(src)
-            ensure_node(tgt)
-            if inter1:
-                ensure_node(inter1, label1)
-            if inter2:
-                ensure_node(inter2, label2)
-
-            if src and inter1 and rel1:
-                links.append({"source": src, "target": inter1, "relation": rel1})
-            if inter1 and inter2 and rel2:
-                links.append({"source": inter1, "target": inter2, "relation": rel2})
-            if inter2 and tgt and rel3:
-                links.append({"source": inter2, "target": tgt, "relation": rel3})
-            if inter1 and tgt and rel2 and not inter2:
-                links.append({"source": inter1, "target": tgt, "relation": rel2})
-            if src and tgt and rel1 and not inter1:
-                links.append({"source": src, "target": tgt, "relation": rel1})
-
-            hop_chain = [self._infer_label(src)]
-            if inter1:
-                hop_chain.append(label1 or self._infer_label(inter1))
-            if inter2:
-                hop_chain.append(label2 or self._infer_label(inter2))
-            hop_chain.append(self._infer_label(tgt))
-            path_descriptions.append(" → ".join(filter(None, hop_chain)))
-
-        dedup_links: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
-        for link in links:
-            key = (link["source"], link["target"], link["relation"])
-            existing = dedup_links.get(key)
-            repo_tag = repo_tag_for_uri(link["source"]) or repo_tag_for_uri(link["target"])
-            if not existing:
-                payload = {
-                    "source": link["source"],
-                    "target": link["target"],
-                    "relation": link["relation"],
-                }
-                if repo_tag:
-                    payload["sourceRepo"] = repo_tag
-                    payload["sourceRepos"] = [repo_tag]
-                dedup_links[key] = payload
-            else:
-                if repo_tag:
-                    repos = set(existing.get("sourceRepos", []))
-                    repos.add(repo_tag)
-                    existing["sourceRepos"] = sorted(repos)
-                    if len(existing["sourceRepos"]) == 1:
-                        existing["sourceRepo"] = existing["sourceRepos"][0]
-
-        links = list(dedup_links.values())
-
-        unique_paths = []
-        seen = set()
-        for desc in path_descriptions:
-            norm = desc.lower()
-            if norm not in seen:
-                seen.add(norm)
-                unique_paths.append(desc)
-
-        source_label = self._infer_label(source_uri) if source_uri else "source concept"
-        target_label = self._infer_label(target_uri) if target_uri else "target concept"
-
-        fallback_summary: str
-        if unique_paths:
-            example_path = unique_paths[0]
-            additional = ""
-            if len(unique_paths) > 1:
-                additional = f" I also identified {len(unique_paths) - 1} additional path(s) with similar clinical reasoning."
-            fallback_summary = (
-                f"Graph analysis uncovered {len(unique_paths)} multi-hop path(s) connecting {source_label} and {target_label}. "
-                f"A representative path is: {example_path}.{additional}"
-            )
-        else:
-            fallback_summary = (
-                f"I explored the unified graph but did not find a multi-hop connection between {source_label} and {target_label}."
-            )
-
-        result_payload = {
-            "nodes": nodes,
-            "links": links
-        }
-
-        summary = await self._interpret_demo_summary(
-            "scenario_2_multihop",
-            question,
-            kg_name,
-            rows,
-            result_payload,
-            logger,
-            extra={
-                "source_label": source_label,
-                "target_label": target_label,
-                "paths": unique_paths
-            },
-            fallback=fallback_summary
-        )
-
-        logger.log_interpretation(summary)
-        logger.log_success("Multi-hop demo scenario completed")
-
-        return {
-            "scenario": "scenario_2_multihop",
-            "scenario_name": "Multi-Hop Path Finding (Demo)",
-            "question": question,
-            "kg_name": kg_name,
-            "nodes": result_payload["nodes"],
-            "links": result_payload["links"],
-            "summary": summary,
-            "sparql_queries": [query],
-            "trace": logger.get_trace(),
-            "trace_formatted": logger.format_for_frontend()
-        }
-
-    async def _execute_federation_demo(
-        self,
-        question: str,
-        kg_name: str,
-        logger: AgentLogger
-    ) -> Dict[str, Any]:
-        logger.log_step(
-            StepType.SPARQL_QUERY,
-            "Executing deterministic federation demo pipeline",
-            details={"question": question}
-        )
-
-        query = """PREFIX owl: <http://www.w3.org/2002/07/owl#>
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-SELECT ?concept1 ?concept2 ?label1 ?label2
-WHERE {
-  ?concept1 owl:sameAs ?concept2 .
-  OPTIONAL { ?concept1 rdfs:label ?label1 }
-  OPTIONAL { ?concept2 rdfs:label ?label2 }
-  FILTER(
-    (CONTAINS(STR(?concept1), "hearing") && CONTAINS(STR(?concept2), "psychiatry")) ||
-    (CONTAINS(STR(?concept1), "psychiatry") && CONTAINS(STR(?concept2), "hearing"))
-  )
-}
-LIMIT 50"""
-
-        sparql_response = await self.call_mcp_tool(
-            "/mcp/sparql",
-            {"query": query, "kg_name": kg_name},
-            logger
-        )
-
-        rows = sparql_response.get("results", [])
-        logger.log_sparql_query(query, len(rows))
-
-        if not rows:
-            logger.log_step(
-                StepType.SPARQL_QUERY,
-                "No alignments returned by repository; using curated demo alignments",
-                status=StepStatus.IN_PROGRESS,
-                details={"fallback": True}
-            )
-            rows = [
-                {
-                    "concept1": "http://example.org/hearing/CognitiveBehavioralTherapy",
-                    "concept2": "http://example.org/psychiatry/CognitiveRestructuring",
-                    "label1": "Cognitive Behavioral Therapy",
-                    "label2": "Cognitive restructuring",
-                },
-                {
-                    "concept1": "http://example.org/hearing/CognitiveBehavioralTherapy",
-                    "concept2": "http://example.org/psychiatry/CognitiveBehavioralTherapy",
-                    "label1": "Cognitive Behavioral Therapy",
-                    "label2": "Cognitive Behavioral Therapy",
-                },
-                {
-                    "concept1": "http://example.org/hearing/AnxietyAmplification",
-                    "concept2": "http://example.org/psychiatry/AnxietyAmplification",
-                    "label1": "Anxiety amplification",
-                    "label2": "Anxiety amplification",
-                },
-                {
-                    "concept1": "http://example.org/hearing/NoiseExposure",
-                    "concept2": "http://example.org/psychiatry/NoiseSensitivityProfile",
-                    "label1": "Noise exposure",
-                    "label2": "Noise sensitivity profile",
-                },
-                {
-                    "concept1": "http://example.org/hearing/SleepDisturbance",
-                    "concept2": "http://example.org/psychiatry/SleepDisturbance",
-                    "label1": "Sleep disturbance",
-                    "label2": "Sleep disturbance",
-                },
-            ]
-
-        alignments: List[Dict[str, Any]] = []
-        nodes: List[Dict[str, Any]] = []
-        links: List[Dict[str, Any]] = []
-
-        def repo_tag_for_uri(uri: Optional[str]) -> Optional[str]:
-            if not uri:
-                return None
-            lowered = uri.lower()
-            if "hearing" in lowered:
-                return "hearing"
-            if "psychiatry" in lowered:
-                return "psychiatry"
-            if "demo" in lowered:
-                return "demo"
-            return None
-
-        def ensure_node(uri: str, label: str = ""):
-            if not uri:
-                return
-            existing = next((n for n in nodes if n["id"] == uri), None)
-            repo_tag = repo_tag_for_uri(uri)
-
-            if existing:
-                if repo_tag:
-                    repos = set(existing.get("sourceRepos", []))
-                    if repo_tag not in repos:
-                        repos.add(repo_tag)
-                        existing["sourceRepos"] = sorted(repos)
-                    if len(existing.get("sourceRepos", [])) == 1:
-                        existing["sourceRepo"] = existing["sourceRepos"][0]
-                return
-
-            payload: Dict[str, Any] = {
-                "id": uri,
-                "label": label or self._infer_label(uri),
-                "type": "concept"
-            }
-            if repo_tag:
-                payload["sourceRepo"] = repo_tag
-                payload["sourceRepos"] = [repo_tag]
-            nodes.append(payload)
-
-        seen_pairs: Set[Tuple[str, str]] = set()
-        link_pairs: Set[Tuple[str, str, str]] = set()
-
-        for row in rows:
-            c1 = row.get("concept1")
-            c2 = row.get("concept2")
-            label1 = row.get("label1", "")
-            label2 = row.get("label2", "")
-
-            ensure_node(c1, label1)
-            ensure_node(c2, label2)
-            if c1 and c2:
-                link_key = (c1, c2, "owl:sameAs")
-                if link_key not in link_pairs:
-                    link_pairs.add(link_key)
-                    link_repos = {repo_tag_for_uri(c1), repo_tag_for_uri(c2)}
-                    link_payload: Dict[str, Any] = {
-                        "source": c1,
-                        "target": c2,
-                        "relation": "owl:sameAs",
-                        "label": "owl:sameAs",
-                    }
-                    if link_repos:
-                        sorted_repos = sorted(r for r in link_repos if r)
-                        link_payload["sourceRepos"] = sorted_repos
-                        if len(sorted_repos) == 1:
-                            link_payload["sourceRepo"] = sorted_repos[0]
-                    links.append(link_payload)
-
-            key = tuple(sorted((c1 or "", c2 or "")))
-            if key in seen_pairs:
-                continue
-
-            seen_pairs.add(key)
-            alignments.append({
-                "concept1": c1,
-                "concept2": c2,
-                "label1": label1 or self._infer_label(c1),
-                "label2": label2 or self._infer_label(c2)
-            })
-
-        top_pairs = [f"{a['label1']} ↔ {a['label2']}" for a in alignments[:10]]
-
-        if alignments:
-            count = len(alignments)
-            headline = top_pairs[0]
-            fallback_summary = (
-                f"By following owl:sameAs alignment axioms across the hearing and psychiatry ontologies, "
-                f"I can relate {headline}. "
-            )
-            if count > 1:
-                examples = top_pairs[1:3]
-                if examples:
-                    fallback_summary += (
-                        f"I surfaced {count} cross-ontology pairing(s); additional examples include {', '.join(examples)}"
-                    )
-                    if count > 3:
-                        fallback_summary += f" and {count - 3} more alignment(s)"
-                    fallback_summary += ". "
-                else:
-                    fallback_summary += f"In total I surfaced {count} cross-ontology pairing(s). "
-            fallback_summary += (
-                "These ontological overlaps highlight shared risk factors and interventions represented in both repositories."
-            )
-        else:
-            fallback_summary = (
-                "I did not find ontology alignments linking the requested hearing and psychiatry concepts in the current graph snapshots."
-            )
-
-        result_payload = {
-            "nodes": nodes,
-            "links": links
-        }
-
-        summary = await self._interpret_demo_summary(
-            "scenario_3_federation",
-            question,
-            kg_name,
-            rows,
-            result_payload,
-            logger,
-            extra={
-                "alignment_count": len(alignments),
-                "top_pairs": top_pairs
-            },
-            fallback=fallback_summary
-        )
-
-        logger.log_interpretation(summary)
-        logger.log_success("Federation demo scenario completed")
-
-        return {
-            "scenario": "scenario_3_federation",
-            "scenario_name": "Federated Cross-KG Alignment (Demo)",
-            "question": question,
-            "kg_name": kg_name,
-            "nodes": nodes,
-            "links": links,
-            "summary": summary,
-            "sparql_queries": [query],
-            "trace": logger.get_trace(),
-            "trace_formatted": logger.format_for_frontend(),
-            "alignments": alignments,
-            "alignment_count": len(alignments)
-        }
-
-    async def _execute_validation_demo(
-        self,
-        question: str,
-        kg_name: str,
-        logger: AgentLogger
-    ) -> Dict[str, Any]:
-        logger.log_step(
-            StepType.SCENARIO_DETECTION,
-            "Executing deterministic validation demo pipeline",
-            details={"question": question}
-        )
-
-        scenario = self.get_scenario_by_id("scenario_4_validation") or {"name": "Assertion Validation (Demo)"}
-        subject_uri = self.known_concept_map.get("hearing loss")
-        therapy_uri = self.known_concept_map.get("cognitive behavioral therapy")
-
-        if not subject_uri or not therapy_uri:
-            raise ValueError("Demo URIs for validation scenario are not configured.")
-
-        evidence_query = f"""PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-SELECT ?relation ?target ?targetLabel
-WHERE {{
-  <{subject_uri}> ?relation ?target .
-  FILTER(?relation IN (<http://example.org/hearing/hasTreatment>, <http://example.org/hearing/managedBy>))
-  OPTIONAL {{ ?target rdfs:label ?targetLabel }}
-}}
-LIMIT 25"""
-
-        logger.log_step(
-            StepType.SPARQL_QUERY,
-            "Executing deterministic validation SPARQL query",
-            details={"query": evidence_query[:200]}
-        )
-
-        sparql_result = await self.call_mcp_tool(
-            "/mcp/sparql",
-            {"query": evidence_query, "kg_name": kg_name},
-            logger
-        )
-
-        rows = sparql_result.get("results", [])
-        logger.log_sparql_query(evidence_query, len(rows))
-
-        results: Dict[str, Any] = {
-            "nodes": [],
-            "links": [],
-            "sparql_queries": [evidence_query]
-        }
-
-        context = {
-            "concept_uris": [subject_uri, therapy_uri]
-        }
-        self._merge_graph_results(results, rows, context, "scenario_4_validation")
-
-        subject_label = self._infer_label(subject_uri)
-        therapy_label = self._infer_label(therapy_uri)
-
-        def humanize(value: str) -> str:
-            if not value:
-                return ""
-            cleaned = value.split("/")[-1].split("#")[-1]
-            cleaned = re.sub(r"(?<!^)(?=[A-Z])", " ", cleaned)
-            cleaned = cleaned.replace("_", " ")
-            return cleaned.strip().lower()
-
-        direct_edges = [
-            row for row in rows if row.get("target") == therapy_uri
-        ]
-        other_treatments: List[str] = []
-        for row in rows:
-            target = row.get("target")
-            if target and target != therapy_uri:
-                label = self._infer_label(target)
-                if label and label not in other_treatments:
-                    other_treatments.append(label)
-
-        if direct_edges:
-            relation_label = humanize(direct_edges[0].get("relation", ""))
-            fallback_summary = (
-                f"Graph validation confirms that {subject_label} is linked to {therapy_label} via the {relation_label} relation in the hearing ontology."
-            )
-            if other_treatments:
-                fallback_summary += (
-                    f" The graph also lists alternative interventions such as {', '.join(humanize(t).title() for t in other_treatments[:3])}."
-                )
-        else:
-            fallback_summary = (
-                f"Graph validation did not find a direct treatment edge between {subject_label} and {therapy_label}. "
-            )
-            if other_treatments:
-                fallback_summary += (
-                    f"The knowledge graph currently records other treatments such as {', '.join(humanize(t).title() for t in other_treatments[:3])}."
-                )
-            else:
-                fallback_summary += "No alternative treatments are recorded for this concept in the demo dataset."
-
-        summary = await self._interpret_demo_summary(
-            "scenario_4_validation",
-            question,
-            kg_name,
-            rows,
-            results,
-            logger,
-            context=context,
-            extra={
-                "subject_label": subject_label,
-                "therapy_label": therapy_label,
-                "has_direct_edge": bool(direct_edges),
-                "other_treatments": [humanize(t).title() for t in other_treatments]
-            },
-            fallback=fallback_summary
-        )
-
-        logger.log_interpretation(summary)
-        logger.log_success("Assertion validation demo scenario completed")
-
-        return {
-            "scenario": "scenario_4_validation",
-            "scenario_name": scenario.get("name", "Assertion Validation (Demo)"),
-            "question": question,
-            "kg_name": kg_name,
-            "nodes": results["nodes"],
-            "links": results["links"],
-            "summary": summary,
-            "sparql_queries": results["sparql_queries"],
-            "trace": logger.get_trace(),
-            "trace_formatted": logger.format_for_frontend(),
-            "evidence_rows": rows
-        }
 
     def _regenerate_sparql_query(
         self,

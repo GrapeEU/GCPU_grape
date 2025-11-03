@@ -1,0 +1,163 @@
+@prefix exdrug: <http://example.org/drug/> .
+@prefix excond: <http://example.org/condition/> .
+@prefix excommon: <http://example.org/common/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# --- Classe Substance ---
+exdrug:Substance rdf:type owl:Class ;
+    rdfs:label "Active Substance" .
+
+# --- Propriétés ---
+exdrug:contraindicatedFor rdf:type owl:ObjectProperty ;
+    rdfs:label "is contraindicated for" .
+
+exdrug:causesSymptom rdf:type owl:ObjectProperty ;
+    rdfs:label "causes symptom" .
+
+exdrug:hasMetabolite rdf:type owl:ObjectProperty ;
+    rdfs:label "has metabolite" .
+
+exdrug:hasMechanismOfAction rdf:type owl:ObjectProperty ;
+    rdfs:label "mechanism of action" .
+
+exdrug:affectsOrgan rdf:type owl:ObjectProperty ;
+    rdfs:label "affects organ" .
+
+exdrug:hasChemicalFormula rdf:type owl:DatatypeProperty ;
+    rdfs:label "chemical formula" .
+
+exdrug:hasMolecularWeight rdf:type owl:DatatypeProperty ;
+    rdfs:label "molecular weight" .
+
+exdrug:hasHalfLife rdf:type owl:DatatypeProperty ;
+    rdfs:label "half-life hours" .
+
+# --- Substance E27B (Metformin-like) ---
+exdrug:E27B rdf:type exdrug:Substance ;
+    rdfs:label "Substance E27B" ;
+    exdrug:hasChemicalFormula "C4H11N5" ;
+    exdrug:hasMolecularWeight "129.16"^^xsd:float ;
+    exdrug:hasHalfLife "6.2"^^xsd:float ;
+    exdrug:contraindicatedFor excond:PostNephrectomyStatus ;
+    exdrug:contraindicatedFor excond:SevereRenalImpairment ;
+    exdrug:contraindicatedFor excond:AcuteMetabolicAcidosis ;
+    exdrug:causesSymptom excommon:StomachDiscomfort ;
+    exdrug:causesSymptom excommon:Nausea ;
+    exdrug:causesSymptom excommon:Diarrhea ;
+    exdrug:hasMetabolite exdrug:E27B_M1 ;
+    exdrug:hasMechanismOfAction excommon:DecreaseHepaticGlucoseProduction ;
+    exdrug:affectsOrgan excommon:Kidney ;
+    exdrug:affectsOrgan excommon:Liver ;
+    exdrug:affectsOrgan excommon:Intestine .
+
+exdrug:E27B_M1 rdf:type exdrug:Substance ;
+    rdfs:label "E27B Metabolite M1" ;
+    exdrug:hasHalfLife "2.5"^^xsd:float ;
+    exdrug:affectsOrgan excommon:Kidney .
+
+# --- Glucorin Substance ---
+exdrug:GlucorinSubstance rdf:type exdrug:Substance ;
+    rdfs:label "Glucorin Active Substance" ;
+    exdrug:hasChemicalFormula "C16H15F6N5O" ;
+    exdrug:hasMolecularWeight "407.31"^^xsd:float ;
+    exdrug:hasHalfLife "12.4"^^xsd:float ;
+    exdrug:causesSymptom excommon:Headache ;
+    exdrug:hasMechanismOfAction excommon:InhibitDPP4Enzyme ;
+    exdrug:affectsOrgan excommon:Pancreas .
+
+# --- Insulin NPH ---
+exdrug:InsulinNPH rdf:type exdrug:Substance ;
+    rdfs:label "Insulin NPH" ;
+    exdrug:hasMolecularWeight "5808"^^xsd:float ;
+    exdrug:hasHalfLife "4.0"^^xsd:float ;
+    exdrug:causesSymptom excommon:Hypoglycemia ;
+    exdrug:causesSymptom excommon:WeightGain ;
+    exdrug:hasMechanismOfAction excommon:IncreaseGlucoseUptake ;
+    exdrug:affectsOrgan excommon:Liver ;
+    exdrug:affectsOrgan excommon:Muscle .
+
+# --- Lisinopril Substance ---
+exdrug:LisinoprilSubstance rdf:type exdrug:Substance ;
+    rdfs:label "Lisinopril" ;
+    exdrug:hasChemicalFormula "C21H31N3O5" ;
+    exdrug:hasMolecularWeight "405.49"^^xsd:float ;
+    exdrug:hasHalfLife "12.0"^^xsd:float ;
+    exdrug:causesSymptom excommon:DryCough ;
+    exdrug:causesSymptom excommon:Dizziness ;
+    exdrug:causesSymptom excommon:Hyperkalemia ;
+    exdrug:contraindicatedFor excond:Pregnancy ;
+    exdrug:contraindicatedFor excond:BilateralRenalArteryStenosis ;
+    exdrug:hasMechanismOfAction excommon:InhibitACEEnzyme ;
+    exdrug:affectsOrgan excommon:Kidney ;
+    exdrug:affectsOrgan excommon:Heart ;
+    exdrug:affectsOrgan excommon:BloodVessels .
+
+# --- Amlodipine Substance ---
+exdrug:AmlodipineSubstance rdf:type exdrug:Substance ;
+    rdfs:label "Amlodipine" ;
+    exdrug:hasChemicalFormula "C20H25ClN2O5" ;
+    exdrug:hasMolecularWeight "408.88"^^xsd:float ;
+    exdrug:hasHalfLife "35.0"^^xsd:float ;
+    exdrug:causesSymptom excommon:AnkleSwelling ;
+    exdrug:causesSymptom excommon:Flushing ;
+    exdrug:hasMechanismOfAction excommon:BlockCalciumChannels ;
+    exdrug:affectsOrgan excommon:Heart ;
+    exdrug:affectsOrgan excommon:BloodVessels .
+
+# --- Atorvastatin Substance ---
+exdrug:AtorvastatinSubstance rdf:type exdrug:Substance ;
+    rdfs:label "Atorvastatin" ;
+    exdrug:hasChemicalFormula "C33H35FN2O5" ;
+    exdrug:hasMolecularWeight "558.64"^^xsd:float ;
+    exdrug:hasHalfLife "14.0"^^xsd:float ;
+    exdrug:causesSymptom excommon:MusclePain ;
+    exdrug:causesSymptom excommon:LiverEnzymeElevation ;
+    exdrug:contraindicatedFor excond:ActiveLiverDisease ;
+    exdrug:contraindicatedFor excond:Pregnancy ;
+    exdrug:hasMechanismOfAction excommon:InhibitHMGCoAReductase ;
+    exdrug:affectsOrgan excommon:Liver ;
+    exdrug:affectsOrgan excommon:Muscle .
+
+# --- Simvastatin Substance ---
+exdrug:SimvastatinSubstance rdf:type exdrug:Substance ;
+    rdfs:label "Simvastatin" ;
+    exdrug:hasChemicalFormula "C25H38O5" ;
+    exdrug:hasMolecularWeight "418.57"^^xsd:float ;
+    exdrug:hasHalfLife "2.0"^^xsd:float ;
+    exdrug:causesSymptom excommon:MusclePain ;
+    exdrug:hasMechanismOfAction excommon:InhibitHMGCoAReductase ;
+    exdrug:affectsOrgan excommon:Liver ;
+    exdrug:affectsOrgan excommon:Muscle .
+
+# --- Warfarin Substance ---
+exdrug:WarfarinSubstance rdf:type exdrug:Substance ;
+    rdfs:label "Warfarin" ;
+    exdrug:hasChemicalFormula "C19H16O4" ;
+    exdrug:hasMolecularWeight "308.33"^^xsd:float ;
+    exdrug:hasHalfLife "40.0"^^xsd:float ;
+    exdrug:causesSymptom excommon:BleedingRisk ;
+    exdrug:contraindicatedFor excond:ActiveBleeding ;
+    exdrug:contraindicatedFor excond:SevereHypertension ;
+    exdrug:hasMechanismOfAction excommon:InhibitVitaminKReductase ;
+    exdrug:affectsOrgan excommon:Liver ;
+    exdrug:affectsOrgan excommon:Blood .
+
+# --- Supplements ---
+exdrug:CalciumCarbonate rdf:type exdrug:Substance ;
+    rdfs:label "Calcium Carbonate" ;
+    exdrug:hasChemicalFormula "CaCO3" ;
+    exdrug:hasMolecularWeight "100.09"^^xsd:float ;
+    exdrug:affectsOrgan excommon:Bone ;
+    exdrug:causesSymptom excommon:Constipation .
+
+exdrug:FerrousSulfate rdf:type exdrug:Substance ;
+    rdfs:label "Ferrous Sulfate" ;
+    exdrug:hasChemicalFormula "FeSO4" ;
+    exdrug:hasMolecularWeight "151.91"^^xsd:float ;
+    exdrug:causesSymptom excommon:Constipation ;
+    exdrug:causesSymptom excommon:Nausea ;
+    exdrug:affectsOrgan excommon:Intestine ;
+    exdrug:affectsOrgan excommon:Blood .
+

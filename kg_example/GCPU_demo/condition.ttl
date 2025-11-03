@@ -1,0 +1,409 @@
+@prefix excond: <http://example.org/condition/> .
+@prefix excommon: <http://example.org/common/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+# --- Classes ---
+excond:Condition rdf:type owl:Class ;
+    rdfs:label "Condition" .
+
+excond:Procedure rdf:type owl:Class ;
+    rdfs:label "Procedure" .
+
+excommon:Organ rdf:type owl:Class ;
+    rdfs:label "Organ" .
+
+excommon:Symptom rdf:type owl:Class ;
+    rdfs:label "Symptom" .
+
+excommon:VitalSign rdf:type owl:Class ;
+    rdfs:label "Vital Sign" .
+
+excommon:LabResult rdf:type owl:Class ;
+    rdfs:label "Laboratory Result" .
+
+excommon:Allergy rdf:type owl:Class ;
+    rdfs:label "Allergy" .
+
+excommon:TherapeuticClass rdf:type owl:Class ;
+    rdfs:label "Therapeutic Class" .
+
+excommon:MechanismOfAction rdf:type owl:Class ;
+    rdfs:label "Mechanism of Action" .
+
+# --- Propriétés ---
+excond:resultsInCondition rdf:type owl:ObjectProperty ;
+    rdfs:label "results in condition" .
+
+excond:typicalSymptom rdf:type owl:ObjectProperty ;
+    rdfs:label "has typical symptom" .
+
+excond:affectsOrgan rdf:type owl:ObjectProperty ;
+    rdfs:label "affects organ" .
+
+excond:hasRiskFactor rdf:type owl:ObjectProperty ;
+    rdfs:label "has risk factor" .
+
+excond:hasComorbidity rdf:type owl:ObjectProperty ;
+    rdfs:label "common comorbidity" .
+
+excond:standardTreatment rdf:type owl:ObjectProperty ;
+    rdfs:label "standard treatment includes" .
+
+excommon:semanticallySimilarTo rdf:type owl:ObjectProperty ;
+    rdfs:label "is similar to" .
+
+# --- Procédures ---
+excond:Nephrectomy2005 rdf:type excond:Procedure ;
+    rdfs:label "Nephrectomy (2005)" ;
+    excond:resultsInCondition excond:PostNephrectomyStatus .
+
+excond:Nephrectomy2018 rdf:type excond:Procedure ;
+    rdfs:label "Nephrectomy (2018)" ;
+    excond:resultsInCondition excond:PostNephrectomyStatus .
+
+excond:AppendectomyProcedure rdf:type excond:Procedure ;
+    rdfs:label "Appendectomy" ;
+    excond:resultsInCondition excond:PostSurgicalStatus .
+
+excond:CataractSurgery rdf:type excond:Procedure ;
+    rdfs:label "Cataract Surgery" .
+
+# --- Conditions Principales ---
+excond:DiabetesMellitus rdf:type excond:Condition ;
+    rdfs:label "Diabetes Mellitus" ;
+    excond:typicalSymptom excommon:Polyuria ;
+    excond:typicalSymptom excommon:Polydipsia ;
+    excond:typicalSymptom excommon:WeightLoss ;
+    excond:affectsOrgan excommon:Pancreas ;
+    excond:affectsOrgan excommon:Kidney ;
+    excond:affectsOrgan excommon:BloodVessels ;
+    excond:hasRiskFactor excommon:Obesity ;
+    excond:hasRiskFactor excommon:SedentaryLifestyle ;
+    excond:hasComorbidity excond:Hypertension ;
+    excond:hasComorbidity excond:Hyperlipidemia ;
+    excond:hasComorbidity excond:CardiovascularDisease .
+
+excond:PostNephrectomyStatus rdf:type excond:Condition ;
+    rdfs:label "Post-Nephrectomy Status" ;
+    excond:typicalSymptom excommon:AbdominalPain ;
+    excond:typicalSymptom excommon:BackPain ;
+    excond:typicalSymptom excommon:Fatigue ;
+    excond:affectsOrgan excommon:Kidney ;
+    excond:hasComorbidity excond:ChronicKidneyDisease ;
+    excond:hasComorbidity excond:Hypertension .
+
+excond:ChronicKidneyDisease rdf:type excond:Condition ;
+    rdfs:label "Chronic Kidney Disease" ;
+    excond:typicalSymptom excommon:Fatigue ;
+    excond:typicalSymptom excommon:Nausea ;
+    excond:typicalSymptom excommon:LossOfAppetite ;
+    excond:affectsOrgan excommon:Kidney ;
+    excond:hasRiskFactor excond:DiabetesMellitus ;
+    excond:hasRiskFactor excond:Hypertension ;
+    excond:hasComorbidity excond:Anemia ;
+    excond:hasComorbidity excond:Hypertension .
+
+excond:Hypertension rdf:type excond:Condition ;
+    rdfs:label "Hypertension" ;
+    excond:typicalSymptom excommon:Headache ;
+    excond:typicalSymptom excommon:Dizziness ;
+    excond:affectsOrgan excommon:Heart ;
+    excond:affectsOrgan excommon:BloodVessels ;
+    excond:affectsOrgan excommon:Kidney ;
+    excond:hasRiskFactor excommon:Obesity ;
+    excond:hasRiskFactor excommon:HighSaltIntake ;
+    excond:hasComorbidity excond:DiabetesMellitus ;
+    excond:hasComorbidity excond:Hyperlipidemia .
+
+excond:Hyperlipidemia rdf:type excond:Condition ;
+    rdfs:label "Hyperlipidemia" ;
+    excond:affectsOrgan excommon:BloodVessels ;
+    excond:affectsOrgan excommon:Liver ;
+    excond:hasRiskFactor excommon:Obesity ;
+    excond:hasRiskFactor excommon:HighFatDiet ;
+    excond:hasComorbidity excond:CardiovascularDisease .
+
+excond:CardiovascularDisease rdf:type excond:Condition ;
+    rdfs:label "Cardiovascular Disease" ;
+    excond:typicalSymptom excommon:ChestPain ;
+    excond:typicalSymptom excommon:Dyspnea ;
+    excond:affectsOrgan excommon:Heart ;
+    excond:affectsOrgan excommon:BloodVessels .
+
+excond:Osteoporosis rdf:type excond:Condition ;
+    rdfs:label "Osteoporosis" ;
+    excond:typicalSymptom excommon:BonePain ;
+    excond:typicalSymptom excommon:Fractures ;
+    excond:affectsOrgan excommon:Bone ;
+    excond:hasRiskFactor excommon:PostmenopauseStatus .
+
+excond:Anemia rdf:type excond:Condition ;
+    rdfs:label "Anemia" ;
+    excond:typicalSymptom excommon:Fatigue ;
+    excond:typicalSymptom excommon:Pallor ;
+    excond:affectsOrgan excommon:Blood ;
+    excond:hasComorbidity excond:ChronicKidneyDisease .
+
+excond:HeartFailure rdf:type excond:Condition ;
+    rdfs:label "Heart Failure" ;
+    excond:typicalSymptom excommon:Dyspnea ;
+    excond:typicalSymptom excommon:Edema ;
+    excond:affectsOrgan excommon:Heart .
+
+excond:Angina rdf:type excond:Condition ;
+    rdfs:label "Angina" ;
+    excond:typicalSymptom excommon:ChestPain ;
+    excond:affectsOrgan excommon:Heart .
+
+excond:AtrialFibrillation rdf:type excond:Condition ;
+    rdfs:label "Atrial Fibrillation" ;
+    excond:typicalSymptom excommon:Palpitations ;
+    excond:affectsOrgan excommon:Heart .
+
+excond:DeepVeinThrombosis rdf:type excond:Condition ;
+    rdfs:label "Deep Vein Thrombosis" ;
+    excond:typicalSymptom excommon:LegSwelling ;
+    excond:affectsOrgan excommon:BloodVessels .
+
+excond:Pregnancy rdf:type excond:Condition ;
+    rdfs:label "Pregnancy" .
+
+excond:ActiveLiverDisease rdf:type excond:Condition ;
+    rdfs:label "Active Liver Disease" ;
+    excond:affectsOrgan excommon:Liver .
+
+excond:ActiveBleeding rdf:type excond:Condition ;
+    rdfs:label "Active Bleeding" .
+
+excond:SevereHypertension rdf:type excond:Condition ;
+    rdfs:label "Severe Hypertension" ;
+    excond:affectsOrgan excommon:Heart ;
+    excond:affectsOrgan excommon:BloodVessels .
+
+excond:SevereRenalImpairment rdf:type excond:Condition ;
+    rdfs:label "Severe Renal Impairment" ;
+    excond:affectsOrgan excommon:Kidney .
+
+excond:AcuteMetabolicAcidosis rdf:type excond:Condition ;
+    rdfs:label "Acute Metabolic Acidosis" .
+
+excond:BilateralRenalArteryStenosis rdf:type excond:Condition ;
+    rdfs:label "Bilateral Renal Artery Stenosis" ;
+    excond:affectsOrgan excommon:Kidney .
+
+excond:PostSurgicalStatus rdf:type excond:Condition ;
+    rdfs:label "Post-Surgical Status" .
+
+# --- Symptômes ---
+excommon:AbdominalPain rdf:type excommon:Symptom ;
+    rdfs:label "Abdominal Pain" .
+
+excommon:StomachDiscomfort rdf:type excommon:Symptom ;
+    rdfs:label "Stomach Discomfort" ;
+    excommon:semanticallySimilarTo excommon:AbdominalPain .
+
+excommon:Fatigue rdf:type excommon:Symptom ;
+    rdfs:label "Fatigue" .
+
+excommon:Nausea rdf:type excommon:Symptom ;
+    rdfs:label "Nausea" .
+
+excommon:Diarrhea rdf:type excommon:Symptom ;
+    rdfs:label "Diarrhea" .
+
+excommon:Headache rdf:type excommon:Symptom ;
+    rdfs:label "Headache" .
+
+excommon:Dizziness rdf:type excommon:Symptom ;
+    rdfs:label "Dizziness" .
+
+excommon:DryCough rdf:type excommon:Symptom ;
+    rdfs:label "Dry Cough" .
+
+excommon:MusclePain rdf:type excommon:Symptom ;
+    rdfs:label "Muscle Pain" .
+
+excommon:JointPain rdf:type excommon:Symptom ;
+    rdfs:label "Joint Pain" .
+
+excommon:BackPain rdf:type excommon:Symptom ;
+    rdfs:label "Back Pain" .
+
+excommon:ChestPain rdf:type excommon:Symptom ;
+    rdfs:label "Chest Pain" .
+
+excommon:Dyspnea rdf:type excommon:Symptom ;
+    rdfs:label "Shortness of Breath" .
+
+excommon:Edema rdf:type excommon:Symptom ;
+    rdfs:label "Edema" .
+
+excommon:AnkleSwelling rdf:type excommon:Symptom ;
+    rdfs:label "Ankle Swelling" .
+
+excommon:LegSwelling rdf:type excommon:Symptom ;
+    rdfs:label "Leg Swelling" .
+
+excommon:Flushing rdf:type excommon:Symptom ;
+    rdfs:label "Flushing" .
+
+excommon:Constipation rdf:type excommon:Symptom ;
+    rdfs:label "Constipation" .
+
+excommon:Hypoglycemia rdf:type excommon:Symptom ;
+    rdfs:label "Hypoglycemia" .
+
+excommon:Hyperkalemia rdf:type excommon:Symptom ;
+    rdfs:label "Hyperkalemia" .
+
+excommon:WeightGain rdf:type excommon:Symptom ;
+    rdfs:label "Weight Gain" .
+
+excommon:WeightLoss rdf:type excommon:Symptom ;
+    rdfs:label "Weight Loss" .
+
+excommon:Polyuria rdf:type excommon:Symptom ;
+    rdfs:label "Polyuria" .
+
+excommon:Polydipsia rdf:type excommon:Symptom ;
+    rdfs:label "Polydipsia" .
+
+excommon:LossOfAppetite rdf:type excommon:Symptom ;
+    rdfs:label "Loss of Appetite" .
+
+excommon:Pallor rdf:type excommon:Symptom ;
+    rdfs:label "Pallor" .
+
+excommon:BonePain rdf:type excommon:Symptom ;
+    rdfs:label "Bone Pain" .
+
+excommon:Fractures rdf:type excommon:Symptom ;
+    rdfs:label "Fractures" .
+
+excommon:Palpitations rdf:type excommon:Symptom ;
+    rdfs:label "Palpitations" .
+
+excommon:BleedingRisk rdf:type excommon:Symptom ;
+    rdfs:label "Bleeding Risk" .
+
+excommon:LiverEnzymeElevation rdf:type excommon:Symptom ;
+    rdfs:label "Liver Enzyme Elevation" .
+
+# --- Organes ---
+excommon:Kidney rdf:type excommon:Organ ;
+    rdfs:label "Kidney" .
+
+excommon:Liver rdf:type excommon:Organ ;
+    rdfs:label "Liver" .
+
+excommon:Heart rdf:type excommon:Organ ;
+    rdfs:label "Heart" .
+
+excommon:Pancreas rdf:type excommon:Organ ;
+    rdfs:label "Pancreas" .
+
+excommon:Intestine rdf:type excommon:Organ ;
+    rdfs:label "Intestine" .
+
+excommon:Muscle rdf:type excommon:Organ ;
+    rdfs:label "Muscle" .
+
+excommon:Blood rdf:type excommon:Organ ;
+    rdfs:label "Blood" .
+
+excommon:BloodVessels rdf:type excommon:Organ ;
+    rdfs:label "Blood Vessels" .
+
+excommon:Bone rdf:type excommon:Organ ;
+    rdfs:label "Bone" .
+
+# --- Signes Vitaux ---
+excommon:BloodPressure140_90 rdf:type excommon:VitalSign ;
+    rdfs:label "Blood Pressure 140/90" .
+
+excommon:BloodPressure120_80 rdf:type excommon:VitalSign ;
+    rdfs:label "Blood Pressure 120/80" .
+
+excommon:HeartRate78 rdf:type excommon:VitalSign ;
+    rdfs:label "Heart Rate 78 bpm" .
+
+# --- Résultats de Laboratoire ---
+excommon:CreatinineElevated rdf:type excommon:LabResult ;
+    rdfs:label "Creatinine Elevated" .
+
+excommon:HbA1c7_2 rdf:type excommon:LabResult ;
+    rdfs:label "HbA1c 7.2%" .
+
+excommon:eGFR45 rdf:type excommon:LabResult ;
+    rdfs:label "eGFR 45 mL/min" .
+
+excommon:eGFR52 rdf:type excommon:LabResult ;
+    rdfs:label "eGFR 52 mL/min" .
+
+# --- Allergies ---
+excommon:PenicillinAllergy rdf:type excommon:Allergy ;
+    rdfs:label "Penicillin Allergy" .
+
+excommon:SulfonamideAllergy rdf:type excommon:Allergy ;
+    rdfs:label "Sulfonamide Allergy" .
+
+# --- Classes Thérapeutiques ---
+excommon:Biguanides rdf:type excommon:TherapeuticClass ;
+    rdfs:label "Biguanides" .
+
+excommon:DPP4Inhibitors rdf:type excommon:TherapeuticClass ;
+    rdfs:label "DPP-4 Inhibitors" .
+
+excommon:Insulins rdf:type excommon:TherapeuticClass ;
+    rdfs:label "Insulins" .
+
+excommon:ACEInhibitors rdf:type excommon:TherapeuticClass ;
+    rdfs:label "ACE Inhibitors" .
+
+excommon:CalciumChannelBlockers rdf:type excommon:TherapeuticClass ;
+    rdfs:label "Calcium Channel Blockers" .
+
+excommon:Statins rdf:type excommon:TherapeuticClass ;
+    rdfs:label "Statins" .
+
+excommon:Anticoagulants rdf:type excommon:TherapeuticClass ;
+    rdfs:label "Anticoagulants" .
+
+# --- Mécanismes d'Action ---
+excommon:DecreaseHepaticGlucoseProduction rdf:type excommon:MechanismOfAction ;
+    rdfs:label "Decrease Hepatic Glucose Production" .
+
+excommon:InhibitDPP4Enzyme rdf:type excommon:MechanismOfAction ;
+    rdfs:label "Inhibit DPP-4 Enzyme" .
+
+excommon:IncreaseGlucoseUptake rdf:type excommon:MechanismOfAction ;
+    rdfs:label "Increase Glucose Uptake" .
+
+excommon:InhibitACEEnzyme rdf:type excommon:MechanismOfAction ;
+    rdfs:label "Inhibit ACE Enzyme" .
+
+excommon:BlockCalciumChannels rdf:type excommon:MechanismOfAction ;
+    rdfs:label "Block Calcium Channels" .
+
+excommon:InhibitHMGCoAReductase rdf:type excommon:MechanismOfAction ;
+    rdfs:label "Inhibit HMG-CoA Reductase" .
+
+excommon:InhibitVitaminKReductase rdf:type excommon:MechanismOfAction ;
+    rdfs:label "Inhibit Vitamin K Reductase" .
+
+# --- Facteurs de Risque ---
+excommon:Obesity rdf:type owl:Class ;
+    rdfs:label "Obesity" .
+
+excommon:SedentaryLifestyle rdf:type owl:Class ;
+    rdfs:label "Sedentary Lifestyle" .
+
+excommon:HighSaltIntake rdf:type owl:Class ;
+    rdfs:label "High Salt Intake" .
+
+excommon:HighFatDiet rdf:type owl:Class ;
+    rdfs:label "High Fat Diet" .
+
+excommon:PostmenopauseStatus rdf:type owl:Class ;
+    rdfs:label "Postmenopause Status" .

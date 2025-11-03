@@ -11,13 +11,17 @@ All execution steps are logged for debugging and frontend display.
 """
 
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException
+import asyncio
+
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, SystemMessage
 from core.config import settings
 from core.agent_executor import AgentExecutor
 from core.agent_logger import AgentLogger, StepType
 from core.vertex_ai_config import get_vertex_ai_chat_model
+from core.status_stream import broadcaster
+from starlette.responses import StreamingResponse
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
@@ -53,6 +57,7 @@ class QueryResponse(BaseModel):
     scenario_name: str = Field(..., description="Human-readable scenario name")
     nodes: List[Dict[str, Any]] = Field(default_factory=list, description="Graph nodes for visualization")
     links: List[Dict[str, Any]] = Field(default_factory=list, description="Graph links for visualization")
+    graph_steps: Optional[List[Dict[str, Any]]] = Field(None, description="List of graph steps for slider (Deep Reasoning)")
     sparql_queries: List[str] = Field(default_factory=list, description="SPARQL queries executed")
     trace: List[Dict[str, Any]] = Field(default_factory=list, description="Execution trace (technical)")
     trace_formatted: List[Dict[str, str]] = Field(default_factory=list, description="Execution trace (user-friendly)")
@@ -121,6 +126,7 @@ async def execute_query(request: QueryRequest):
             scenario_name=result["scenario_name"],
             nodes=result.get("nodes", []),
             links=result.get("links", []),
+            graph_steps=result.get("graph_steps"),
             sparql_queries=result.get("sparql_queries", []),
             trace=result.get("trace", []),
             trace_formatted=result.get("trace_formatted", [])
@@ -212,6 +218,31 @@ Response:"""
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
+
+
+@router.get("/status-stream")
+async def status_stream(request: Request):
+    """Server-Sent Events endpoint streaming demo status updates."""
+
+    queue = broadcaster.subscribe()
+
+    async def event_generator():
+        try:
+            # Initial retry directive for SSE clients
+            yield "retry: 2000\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {message}\n\n"
+                except asyncio.TimeoutError:
+                    # Keep-alive comment to prevent timeouts
+                    yield ": keep-alive\n\n"
+        finally:
+            broadcaster.unsubscribe(queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/scenarios")

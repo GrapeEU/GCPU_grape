@@ -1,0 +1,117 @@
+@prefix expat: <http://example.org/patient/> .
+@prefix excond: <http://example.org/condition/> .
+@prefix exmed: <http://example.org/medication/> .
+@prefix excommon: <http://example.org/common/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# --- Classe Patient ---
+expat:Patient rdf:type owl:Class ;
+    rdfs:label "Patient Record" .
+
+# --- Propriétés du Patient ---
+expat:hasCondition rdf:type owl:ObjectProperty ;
+    rdfs:label "has diagnosed condition" .
+
+expat:hasProcedure rdf:type owl:ObjectProperty ;
+    rdfs:label "has past procedure" .
+
+expat:hasSymptom rdf:type owl:ObjectProperty ;
+    rdfs:label "is currently experiencing" .
+
+expat:takesMedication rdf:type owl:ObjectProperty ;
+    rdfs:label "is currently taking" .
+
+expat:hasAllergy rdf:type owl:ObjectProperty ;
+    rdfs:label "has allergy to" .
+
+expat:hasVitalSign rdf:type owl:ObjectProperty ;
+    rdfs:label "has vital sign" .
+
+expat:hasLabResult rdf:type owl:ObjectProperty ;
+    rdfs:label "has laboratory result" .
+
+expat:hasFamilyHistory rdf:type owl:ObjectProperty ;
+    rdfs:label "has family history of" .
+
+expat:hasAge rdf:type owl:DatatypeProperty ;
+    rdfs:label "age" .
+
+expat:hasGender rdf:type owl:DatatypeProperty ;
+    rdfs:label "gender" .
+
+expat:hasBloodType rdf:type owl:DatatypeProperty ;
+    rdfs:label "blood type" .
+
+expat:hasBMI rdf:type owl:DatatypeProperty ;
+    rdfs:label "BMI" .
+
+# --- Instance Patient Principal ---
+expat:PatientJohn rdf:type expat:Patient ;
+    rdfs:label "Patient John (Dossier 734)" ;
+    expat:hasAge "67"^^xsd:integer ;
+    expat:hasGender "Male" ;
+    expat:hasBloodType "A+" ;
+    expat:hasBMI "28.5"^^xsd:float ;
+    expat:hasCondition excond:DiabetesMellitus ;
+    expat:hasCondition excond:Hypertension ;
+    expat:hasCondition excond:ChronicKidneyDisease ;
+    expat:hasProcedure excond:Nephrectomy2005 ;
+    expat:hasProcedure excond:AppendectomyProcedure ;
+    expat:hasProcedure excond:CataractSurgery ;
+    expat:hasSymptom excommon:AbdominalPain ;
+    expat:hasSymptom excommon:Fatigue ;
+    expat:hasSymptom excommon:Nausea ;
+    expat:takesMedication exmed:Metamorphine ;
+    expat:takesMedication exmed:Lisinopril ;
+    expat:takesMedication exmed:Atorvastatin ;
+    expat:hasAllergy excommon:PenicillinAllergy ;
+    expat:hasAllergy excommon:SulfonamideAllergy ;
+    expat:hasVitalSign excommon:BloodPressure140_90 ;
+    expat:hasVitalSign excommon:HeartRate78 ;
+    expat:hasLabResult excommon:CreatinineElevated ;
+    expat:hasLabResult excommon:HbA1c7_2 ;
+    expat:hasLabResult excommon:eGFR45 ;
+    expat:hasFamilyHistory excond:DiabetesMellitus ;
+    expat:hasFamilyHistory excond:CardiovascularDisease .
+
+# --- Patients Additionnels (pour enrichir le graphe) ---
+expat:PatientMary rdf:type expat:Patient ;
+    rdfs:label "Patient Mary (Dossier 521)" ;
+    expat:hasAge "54"^^xsd:integer ;
+    expat:hasGender "Female" ;
+    expat:hasBloodType "O-" ;
+    expat:hasBMI "24.1"^^xsd:float ;
+    expat:hasCondition excond:DiabetesMellitus ;
+    expat:hasCondition excond:Osteoporosis ;
+    expat:takesMedication exmed:Glucorin ;
+    expat:takesMedication exmed:CalciumSupplements ;
+    expat:hasSymptom excommon:JointPain ;
+    expat:hasVitalSign excommon:BloodPressure120_80 .
+
+expat:PatientRobert rdf:type expat:Patient ;
+    rdfs:label "Patient Robert (Dossier 892)" ;
+    expat:hasAge "72"^^xsd:integer ;
+    expat:hasGender "Male" ;
+    expat:hasBloodType "B+" ;
+    expat:hasBMI "31.2"^^xsd:float ;
+    expat:hasCondition excond:PostNephrectomyStatus ;
+    expat:hasCondition excond:Hypertension ;
+    expat:hasProcedure excond:Nephrectomy2018 ;
+    expat:takesMedication exmed:Lisinopril ;
+    expat:hasSymptom excommon:BackPain ;
+    expat:hasLabResult excommon:eGFR52 .
+
+expat:PatientSarah rdf:type expat:Patient ;
+    rdfs:label "Patient Sarah (Dossier 336)" ;
+    expat:hasAge "45"^^xsd:integer ;
+    expat:hasGender "Female" ;
+    expat:hasBloodType "AB+" ;
+    expat:hasBMI "22.8"^^xsd:float ;
+    expat:hasCondition excond:ChronicKidneyDisease ;
+    expat:hasCondition excond:Anemia ;
+    expat:takesMedication exmed:IronSupplements ;
+    expat:hasSymptom excommon:Fatigue ;
+    expat:hasLabResult excommon:CreatinineElevated .
+

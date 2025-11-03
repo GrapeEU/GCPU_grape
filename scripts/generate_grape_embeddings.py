@@ -18,6 +18,7 @@ Requirements:
 """
 
 import sys
+import argparse
 import os
 from pathlib import Path
 
@@ -115,8 +116,35 @@ GRAPE_KGS = [
     }
 ]
 
+KG_LOOKUP = {}
+for _cfg in GRAPE_KGS:
+    keys = {_cfg["short_name"].lower()}
+    if _cfg["short_name"].lower().startswith("grape_"):
+        keys.add(_cfg["short_name"][6:].lower())
+    keys.add(_cfg["short_name"].replace("grape_", "", 1).lower())
+    for key in keys:
+        KG_LOOKUP[key] = _cfg
+
 # Embedding model configuration
 EMBEDDING_MODEL = "nomic-embed-text_faiss@local"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate Grape knowledge graph embeddings."
+    )
+    parser.add_argument(
+        "kgs",
+        metavar="KG",
+        nargs="*",
+        help="KG identifiers to process (e.g. unified, grape_unified).",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Process all configured knowledge graphs.",
+    )
+    return parser.parse_args()
 
 
 def configure_gen2kgbot_for_kg(kg_config):
@@ -272,7 +300,7 @@ def preprocess_kg(kg_config):
         return False
 
 
-def check_prerequisites():
+def check_prerequisites(target_kgs):
     """
     Check that all prerequisites are met
 
@@ -287,7 +315,7 @@ def check_prerequisites():
     logger.info("1. Checking GraphDB connectivity...")
     try:
         import requests
-        for kg in GRAPE_KGS:
+        for kg in target_kgs:
             # GraphDB: use /size endpoint to check connectivity
             size_endpoint = f"{kg['endpoint']}/size"
             response = requests.get(size_endpoint, timeout=5)
@@ -349,8 +377,36 @@ def main():
     print("🍇 GRAPE - Knowledge Graph Embeddings Generator")
     print("="*70)
 
+    args = parse_args()
+
+    request_all = args.all or any(kg.lower() == "all" for kg in args.kgs)
+    if request_all:
+        target_kgs = GRAPE_KGS
+    else:
+        if not args.kgs:
+            print("❌ Please specify at least one KG or use --all.")
+            print("   Examples: python scripts/generate_grape_embeddings.py unified")
+            print("             python scripts/generate_grape_embeddings.py --all")
+            sys.exit(1)
+
+        target_kgs = []
+        seen = set()
+        for name in args.kgs:
+            key = name.lower()
+            cfg = KG_LOOKUP.get(key)
+            if not cfg:
+                print(f"❌ Unknown KG identifier: {name}")
+                print("   Available: " + ", ".join(sorted({cfg['short_name'] for cfg in GRAPE_KGS})))
+                sys.exit(1)
+            if cfg["short_name"] not in seen:
+                target_kgs.append(cfg)
+                seen.add(cfg["short_name"])
+
+    selected_names = ", ".join(cfg["short_name"] for cfg in target_kgs)
+    logger.info(f"\nSelected KGs: {selected_names}")
+
     # Check prerequisites
-    if not check_prerequisites():
+    if not check_prerequisites(target_kgs):
         logger.error("\n❌ Prerequisites check failed. Please fix the issues above.")
         sys.exit(1)
 
@@ -358,7 +414,7 @@ def main():
 
     # Process each KG
     results = []
-    for kg_config in GRAPE_KGS:
+    for kg_config in target_kgs:
         success = preprocess_kg(kg_config)
         results.append((kg_config["short_name"], success))
 

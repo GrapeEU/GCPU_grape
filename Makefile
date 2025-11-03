@@ -14,6 +14,7 @@ help:
 	@echo ""
 	@echo "Knowledge Graph:"
 	@echo "  make load-kg     - Load knowledge graphs into GraphDB"
+	@echo "  make run         - One-shot demo setup (GraphDB + demo KG + embeddings + stack)"
 	@echo "  make graphdb-logs - Show GraphDB logs"
 	@echo "  make graphdb-test - Test SPARQL connection"
 	@echo "  make reset-db    - Reset GraphDB (delete all data)"
@@ -135,6 +136,22 @@ status:
 	else \
 		echo "  ❌ GraphDB:  Not running"; \
 	fi
+
+# One-shot demo runner: start stack, load demo KG, pull model, generate embeddings
+run:
+	@echo "🚀 Running full demo setup..."
+	docker-compose up -d --build
+	@echo "⏳ Waiting for GraphDB to be ready..." && sleep 5
+	@bash scripts/refresh_unified_demo.sh
+	@echo "📦 Pulling Ollama model (nomic-embed-text) if needed..."
+	-@docker-compose exec -T ollama ollama pull nomic-embed-text 2>/dev/null || true
+	@echo "🧠 Generating embeddings for unified..."
+	-@docker-compose exec -T api python scripts/generate_grape_embeddings.py unified || \
+	  (echo "Fallback: run locally" && python scripts/generate_grape_embeddings.py unified)
+	@echo "✅ Demo environment ready."
+	@echo "   • GraphDB:  http://localhost:7200"
+	@echo "   • Backend:  http://localhost:8000"
+	@echo "   • Frontend: http://localhost:3000"
 	@if docker ps | grep -q grape-api; then \
 		echo "  ✅ Backend:  http://localhost:8000 (healthy)"; \
 	else \

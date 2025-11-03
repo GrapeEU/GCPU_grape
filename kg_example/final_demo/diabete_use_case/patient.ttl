@@ -1,47 +1,33 @@
-@prefix expat:   <http://example.org/patient/> .
-@prefix excond:  <http://example.org/condition/> .
-@prefix exmed:   <http://example.org/medication/> .
+@prefix expat: <http://example.org/patient/> .
+@prefix excond: <http://example.org/condition/> .
+@prefix exmed: <http://example.org/medication/> .
 @prefix excommon: <http://example.org/common/> .
-@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix owl:     <http://www.w3.org/2002/07/owl#> .
-@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-### Classes ###
-expat:Patient rdf:type owl:Class .
+# --- Classe Patient ---
+expat:Patient rdf:type owl:Class ;
+    rdfs:label "Patient Record" .
 
-### Properties ###
+# --- Propriétés du Patient ---
 expat:hasCondition rdf:type owl:ObjectProperty ;
-  rdfs:domain expat:Patient ;
-  rdfs:range excond:Condition .
+    rdfs:label "has diagnosed condition" .
 
 expat:hasProcedure rdf:type owl:ObjectProperty ;
-  rdfs:domain expat:Patient ;
-  rdfs:range excond:Procedure .
+    rdfs:label "has past procedure" .
 
 expat:hasSymptom rdf:type owl:ObjectProperty ;
-  rdfs:domain expat:Patient ;
-  rdfs:range excommon:Symptom .
+    rdfs:label "is currently experiencing" .
 
 expat:takesMedication rdf:type owl:ObjectProperty ;
-  rdfs:domain expat:Patient ;
-  rdfs:range exmed:Medication .
+    rdfs:label "is currently taking" .
 
-expat:age rdf:type owl:DatatypeProperty ;
-  rdfs:range xsd:integer .
+# --- Instance Patient ---
+expat:PatientJohn rdf:type expat:Patient ;
+    rdfs:label "Patient John (Dossier 734)" ;
+    expat:hasCondition excond:DiabetesMellitus ;
+    expat:hasProcedure excond:Nephrectomy2005 ;
+    expat:hasSymptom excommon:AbdominalPain ;
+    expat:takesMedication exmed:Metamorphine .
 
-expat:sex rdf:type owl:DatatypeProperty ;
-  rdfs:range xsd:string .
-
-expat:dateOfBirth rdf:type owl:DatatypeProperty ;
-  rdfs:range xsd:date .
-
-### Instance ###
-expat:Patient123 rdf:type expat:Patient ;
-  expat:age "68"^^xsd:integer ;
-  expat:sex "M" ;
-  expat:dateOfBirth "1957-08-15"^^xsd:date ;
-  expat:hasCondition excond:DiabetesMellitus ;
-  expat:hasProcedure excond:Nephrectomy2005 ;
-  expat:hasSymptom excommon:AbdominalPain ;
-  expat:takesMedication exmed:Metformin .

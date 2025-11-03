@@ -10,7 +10,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import agents from '@/data/agents.json';
 
 const defaultAgentId =
-  agents.find(agent => agent.id === 'integrative-health')?.id ??
+  agents.find(agent => agent.id === 'medical-expert')?.id ??
   agents[0]?.id ??
   null;
 
