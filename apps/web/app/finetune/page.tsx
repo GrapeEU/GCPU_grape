@@ -1,8 +1,8 @@
 const availableModels = ['gemini-2.5-flash', 'gemini-1.5-pro', 'llama-3.1-70b', 'custom-federated'];
 const availableGraphs = [
-  { id: 'hearing', label: 'Hearing & Tinnitus KG' },
-  { id: 'psychiatry', label: 'Psychiatry KG' },
-  { id: 'unified', label: 'Unified Cross-Discipline KG' },
+  { id: 'hearing', label: 'Patient Data KG' },
+  { id: 'psychiatry', label: 'Drug & Composition KG' },
+  { id: 'unified', label: 'Public Medical Knowledge KG' },
 ];
 
 export default function FinetunePage() {
@@ -113,8 +113,8 @@ export default function FinetunePage() {
             <select className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#1C1C1C] focus:border-[#E57373] focus:outline-none">
               <option>Scenario 1 – Neighbourhood exploration</option>
               <option>Scenario 2 – Multi-hop reasoning</option>
-              <option>Scenario 3 – Federation</option>
-              <option>Scenario 4 – Validation</option>
+              <option>Scenario 3 – Verifier (Ontology Proof)</option>
+              <option>Scenario 4 – Deep Reasoning (S1→S3)</option>
             </select>
             <textarea
               rows={2}

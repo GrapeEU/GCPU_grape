@@ -3,36 +3,33 @@ export default function HowItWorksPage() {
     <div className="mx-auto flex max-w-4xl flex-col gap-12 px-8 py-20">
       <section className="flex flex-col gap-6">
         <h1 className="text-4xl font-bold text-left text-[#1C1C1C]">
-          How the "Grape" Agent Works
+          How Grape Works: Language ↔ Logic
         </h1>
       </section>
 
       <section className="flex flex-col gap-6">
         <p className="text-lg leading-relaxed text-justify text-[#4B5563]">
-          For this hackathon, we focused on the first piece of our vision:{" "}
-          <strong>The Grape Agent</strong>.
+          Many believe we’re entering the decade of AI agents. But agents only
+          work if we can <em>trust</em> them. Grape tackles trust by cleanly
+          separating the LLM (language) from the Knowledge Graph (logic).
         </p>
         <p className="text-lg leading-relaxed text-justify text-[#4B5563]">
-          This agent is a reasoning engine that operates on top of a knowledge graph.
-          We use a frugal LLM not for its knowledge, but as an intelligent orchestrator
-          to translate human questions into logical queries.
+          In this demo, the agent reasons over a federated graph built from three
+          sources: <strong>Patient data</strong>, <strong>Drug & composition</strong>,
+          and <strong>Public medical knowledge</strong>.
         </p>
         <p className="text-lg leading-relaxed text-justify text-[#4B5563]">
-          This "Agent-on-a-Graph" provides benefits that LLMs alone cannot:
+          The LLM acts as a smart pilot that interprets your question. The
+          Knowledge Graph—bound by an ontology—does the reasoning and provides
+          a proof you can inspect.
+        </p>
+        <p className="text-lg leading-relaxed text-justify text-[#4B5563]">
+          Why this matters compared to RAG or Graph‑RAG:
         </p>
         <div className="mx-auto max-w-2xl space-y-4">
-          <p className="text-base leading-relaxed text-justify text-[#4B5563]">
-            <strong className="text-[#1C1C1C]">Zero Hallucination:</strong> Answers
-            are derived from the graph's facts, not invented.
-          </p>
-          <p className="text-base leading-relaxed text-justify text-[#4B5563]">
-            <strong className="text-[#1C1C1C]">Full Traceability:</strong> Every
-            conclusion is an auditable proof.
-          </p>
-          <p className="text-base leading-relaxed text-justify text-[#4B5563]">
-            <strong className="text-[#1C1C1C]">Frugal Power:</strong> We use a small
-            LLM as a "pilot" to steer the powerful KG engine.
-          </p>
+          <p className="text-base leading-relaxed text-justify text-[#4B5563]"><strong className="text-[#1C1C1C]">RAG</strong> grounds answers in text, but does not explain <em>why</em> a relation holds.</p>
+          <p className="text-base leading-relaxed text-justify text-[#4B5563]"><strong className="text-[#1C1C1C]">Graph‑RAG</strong> finds connections, but still lacks formal proofs.</p>
+          <p className="text-base leading-relaxed text-justify text-[#4B5563]"><strong className="text-[#1C1C1C]">Grape</strong> uses ontology rules to <em>prove</em> conclusions—transparent and auditable.</p>
         </div>
       </section>
 
@@ -40,10 +37,7 @@ export default function HowItWorksPage() {
         <h2 className="text-2xl font-semibold text-left text-[#1C1C1C]">
           Core Reasoning Capabilities
         </h2>
-        <p className="text-lg leading-relaxed text-justify text-[#4B5563]">
-          The Grape agent can be dynamically configured by the LLM to perform three
-          core operations:
-        </p>
+        <p className="text-lg leading-relaxed text-justify text-[#4B5563]">The agent navigates your graph with three tools:</p>
         <div className="mx-auto flex max-w-3xl flex-col gap-6 text-left">
           <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-[#1C1C1C]">
@@ -67,12 +61,11 @@ export default function HowItWorksPage() {
           </div>
           <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
             <h3 className="text-lg font-semibold text-[#1C1C1C]">
-              Cross-Graph Alignment
+              Verifier (Ontology‑based proof)
             </h3>
             <p className="mt-3 text-base leading-relaxed text-[#4B5563]">
-              <em>"Do audiology and psychiatry share any concepts?"</em> The agent
-              bridges separate graphs to reveal shared risk factors or therapies,
-              breaking down knowledge silos.
+              Applies ontology rules to validate new facts. Example rule: side effects
+              of a sub‑sequence are side effects of the parent drug.
             </p>
           </div>
         </div>
@@ -83,12 +76,11 @@ export default function HowItWorksPage() {
           The "Deep Reasoning" Mode
         </h2>
         <p className="text-lg leading-relaxed text-justify text-[#4B5563]">
-          In this advanced mode, the user asks a complex question. The LLM agent
-          doesn't just pick one scenario; it <em>combines</em> them. It might first{" "}
-          <strong>Explore</strong> a concept, then <strong>Find a Path</strong> to
-          another, and finally <strong>Validate</strong> a hypothesis against a third,
-          all within a single, autonomous reasoning loop before returning the final,
-          synthesized answer.
+          Ask a complex question and the agent autonomously chains the tools.
+          Example: a diabetic patient on Metformin reports abdominal pain. The agent
+          explores Metformin, finds a path to a chemical sub‑sequence (E27B), then
+          uses the Verifier to apply the ontology rule: side effects of a sub‑sequence
+          are side effects of the parent drug. The proof graph supports the conclusion.
         </p>
       </section>
 

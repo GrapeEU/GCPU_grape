@@ -156,15 +156,22 @@ export default function Home() {
         </h2>
 
         <p className="animate-fade-in-up animation-delay-400 max-w-3xl text-xl leading-relaxed text-[#4B5563]">
-          Grape empowers domain experts to build trustworthy AI systems. We combine
-          the reasoning power of Knowledge Graphs with tiny agents to deliver answers
-          that are transparent, traceable, and free from hallucination.
+          We separate language from logic. A compact LLM understands your question,
+          while a Knowledge Graph does the reasoning with ontology-backed rules.
+          The result: transparent, verifiable answers without hallucination.
         </p>
       </section>
 
       {/* Graph Preview with animation */}
       <div className="animate-fade-in-up animation-delay-600 w-full max-w-6xl">
         <GraphPreview />
+      </div>
+
+      {/* Evaluator hint */}
+      <div className="mt-6 w-full max-w-3xl rounded-2xl border border-[#E5E7EB] bg-white p-5 text-center text-sm text-[#4B5563] animate-fade-in-up" style={{animationDelay: "700ms"}}>
+        To try the demo: open <strong>Chat with the Agent</strong>, enable
+        <strong> Deep Reasoning</strong>, or pick a specific scenario to see how the
+        Explorer, Path Finder, and Verifier work step‑by‑step.
       </div>
 
       {/* Action Cards with staggered animation */}

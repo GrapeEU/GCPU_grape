@@ -1,6 +1,8 @@
 # 🍇 Grape
 
-> Google Cloud University Hackathon 2025 · Knowledge-graph powered medical reasoning agent
+> Google Cloud University Hackathon 2025 · Knowledge‑graph powered medical reasoning agent
+
+Live Demo (Google Cloud): http://34.155.101.97:3000/
 
 ---
 
@@ -9,26 +11,30 @@
 ## Overview
 
 Grape is an end‑to‑end demo of a graph‑centric AI assistant.  
-The backend orchestrates deterministic scenarios over several RDF repositories, while the frontend streams MCP traces and renders the exact nodes/edges that powered each answer.
+The backend orchestrates deterministic scenarios over RDF repositories, while the frontend streams MCP traces and renders the exact nodes/edges that powered each answer.
 
-Out of the box we ship three knowledge graphs (`hearing`, `psychiatry`, `unified`) plus a small demo graph.  
-All scenarios run without “hallucination” because they ground every answer in SPARQL results.
+In the demo, we federate three conceptual knowledge graphs:
+- Patient data (clinical profile, history)
+- Drug & composition knowledge (molecules, sub‑sequences, side‑effects)
+- Public medical knowledge (conditions, symptoms, rules)
+
+All scenarios run without “hallucination” because answers are grounded in SPARQL results and ontology rules.
 
 ---
 
 ## Key capabilities
 
 - **Scenario 1 – Neighbourhood Exploration**  
-  Given a concept URI, retrieves nearby symptoms, interventions, risk factors, and tests.
+  Given a concept, retrieve nearby symptoms, interventions, risk factors, and tests.
 
-- **Scenario 2 – Multi-hop Path Finding (Demo)**  
-  Finds multi-hop paths (up to 3 hops) between Chronic Stress and Hearing Loss inside the unified graph and explains the link.
+- **Scenario 2 – Multi‑hop Path Finding**  
+  Find non‑obvious chains of relationships connecting two concepts.
 
-- **Scenario 3 – Federated Cross-KG Alignment (Demo)**  
-  Surfaces deterministic owl:sameAs pairs between the hearing and psychiatry repositories.
+- **Scenario 3 – Verifier (Ontology Proof)**  
+  Validate or refute a claim by applying ontology rules to produce a proof graph (e.g., sub‑sequence side‑effects imply parent‑drug side‑effects).
 
-- **Scenario 4 – Conversational Agent**  
-  The `/api/agent/chat` endpoint leverages scenario detection, embeddings, MCP tools, and returns formatted traces that match the UI timeline.
+- **Scenario 4 – Deep Reasoning Mode**  
+  Autonomous chaining of Scenarios 1–3. The agent explores, finds paths, and verifies hypotheses before answering, with full, auditable traces.
 
 - **MCP Tool suite** (`/api/mcp/*`)  
   - `extract_entities` → LLM/regex hybrid entity extractor  
@@ -63,10 +69,13 @@ All scenarios run without “hallucination” because they ground every answer i
   FastAPI with scenario orchestrator, MCP endpoints, FAISS embedding index, asynchronous SPARQL pipeline.
 
 - **Knowledge store**  
-  GraphDB 10.7 running four repositories: `demo`, `hearing`, `psychiatry`, `unified`.
+  GraphDB 10.7 hosting the federated graphs. Conceptually: Patient, Drug & Composition, and Public Medical Knowledge (see scripts and `kg_example/`).
 
 - **Embeddings**  
   Generated via `scripts/generate_grape_embeddings.py`, stored under `apps/backend/gen2kgbot/data/...`.
+
+- **Deployment**  
+  Deployed on Google Cloud. Public UI: http://34.155.101.97:3000/
 
 ---
 

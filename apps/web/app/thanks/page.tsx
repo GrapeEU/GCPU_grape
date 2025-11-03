@@ -11,7 +11,7 @@ export default function ThanksPage() {
       <section className="flex flex-col gap-6 text-center">
         <p className="text-lg leading-relaxed text-[#4B5563]">
           We extend our deepest gratitude to <strong>Fabien</strong> and{" "}
-          <strong>Youssouf</strong> of the Wimmics team at Inria, true pioneers
+          <strong>Yousouf</strong> of the Wimmics team at Inria, true pioneers
           of the Semantic Web. Their foundational work on{" "}
           <strong>gen2kgbot</strong> provided the engine for our agent, and their
           global leadership in the field is a constant inspiration.
